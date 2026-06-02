@@ -1,0 +1,214 @@
+const express = require("express");
+const campaignController = require("./controller");
+const router = express.Router();
+const execute = require("../../middleware/executor");
+const {
+  auth,
+  accessAllowed,
+  requirePermission,
+} = require("../../middleware/index");
+const { USER_TYPE } = require("./constant");
+const { RESOURCES, ACTIONS } = require("../userConfig/constant");
+
+/**
+ * @swagger
+ * tags:
+ *   name: Campaign
+ *   description: Campaign management
+ */
+
+/**
+ * @swagger
+ * /api/v1/campaign/add:
+ *   post:
+ *     summary: Create a campaign within the caller's organisation
+ *     tags: [Campaign]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - title
+ *               - type
+ *             properties:
+ *               title: { type: string }
+ *               type: { type: string, enum: [mobile, ctv, web] }
+ *               goal: { type: string }
+ *               status: { type: string, enum: [active, paused] }
+ *               currency: { type: string }
+ *               budget: { type: string }
+ *               dailyBudget: { type: string }
+ *               kpi: { type: string }
+ *               isScheduling: { type: boolean }
+ *               startDate: { type: string, format: date-time }
+ *               endDate: { type: string, format: date-time }
+ *               mmpPlatform: { type: string }
+ *               ctaUrl: { type: string }
+ *               vtaUrl: { type: string }
+ *               eventDetails:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     name: { type: string }
+ *                     bidPrice: { type: string }
+ *                     currency: { type: string }
+ *               geo:
+ *                 type: array
+ *                 items: { type: string }
+ *               isCustomTargating: { type: boolean }
+ *               customTargating:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     country: { type: string }
+ *                     state: { type: string }
+ *                     city: { type: string }
+ *               audienceTarget: { type: string, enum: [all, custom] }
+ *               inventoryType: { type: string, enum: [programmatic, oem_premium_partners] }
+ *               oemPremiumPartners:
+ *                 type: array
+ *                 items: { type: string }
+ *               media:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     id: { type: string }
+ *                     link: { type: string }
+ *                     type: { type: string }
+ *     responses:
+ *       200:
+ *         description: Campaign created successfully
+ */
+router.post(
+  "/add",
+  auth,
+  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  requirePermission(RESOURCES.CAMPAIGN, ACTIONS.CREATE),
+  execute(campaignController.add)
+);
+
+/**
+ * @swagger
+ * /api/v1/campaign/list:
+ *   get:
+ *     summary: List campaigns within the caller's organisation
+ *     tags: [Campaign]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *       - in: query
+ *         name: type
+ *         schema: { type: string, enum: [mobile, ctv, web] }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [active, paused, deleted] }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Campaigns fetched successfully
+ */
+router.get(
+  "/list",
+  auth,
+  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  requirePermission(RESOURCES.CAMPAIGN, ACTIONS.VIEW),
+  execute(campaignController.list)
+);
+
+/**
+ * @swagger
+ * /api/v1/campaign/get/{id}:
+ *   get:
+ *     summary: Get a campaign by id within the caller's organisation
+ *     tags: [Campaign]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Campaign fetched successfully
+ */
+router.get(
+  "/get/:id",
+  auth,
+  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  requirePermission(RESOURCES.CAMPAIGN, ACTIONS.VIEW),
+  execute(campaignController.get)
+);
+
+/**
+ * @swagger
+ * /api/v1/campaign/update/{id}:
+ *   patch:
+ *     summary: Update a campaign within the caller's organisation
+ *     tags: [Campaign]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Campaign updated successfully
+ */
+router.patch(
+  "/update/:id",
+  auth,
+  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  requirePermission(RESOURCES.CAMPAIGN, ACTIONS.UPDATE),
+  execute(campaignController.update)
+);
+
+/**
+ * @swagger
+ * /api/v1/campaign/delete/{id}:
+ *   delete:
+ *     summary: Delete (soft) a campaign within the caller's organisation
+ *     tags: [Campaign]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Campaign deleted successfully
+ */
+router.delete(
+  "/delete/:id",
+  auth,
+  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  requirePermission(RESOURCES.CAMPAIGN, ACTIONS.DELETE),
+  execute(campaignController.remove)
+);
+
+module.exports = router;
