@@ -53,6 +53,7 @@ const options = {
   swaggerDefinition,
   apis: [
     "./modules/user/routes.js",
+    "./modules/userConfig/routes.js",
     "./modules/media/routes.js",
     "./modules/campaign/routes.js",
     "./modules/organization/routes.js"
