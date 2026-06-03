@@ -34,4 +34,15 @@ module.exports = {
     OEM_PREMIUM_PARTNERS: 'oem_premium_partners',
   },
 
+  MMP: {
+    APPSFLYER: "appsflyer",
+    ADJUST: "adjust",
+    BRANCH: "branch",
+    SINGULAR: "singular",
+    APPTROVE: "apptrove",
+    KOCHAWA: "kochawa",
+    APPMETRICA: "appmetrica",
+    AFFISE: "affise",
+  }
+
 };

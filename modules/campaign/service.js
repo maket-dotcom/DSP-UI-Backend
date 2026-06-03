@@ -25,7 +25,8 @@ const campaignService = {
     query.status = isUndefinedOrNull(status) ? { $ne: STATUS.DELETED } : status;
     if (!isUndefinedOrNull(type)) query.type = type;
     if (!isUndefinedOrNull(search)) {
-      query.title = new RegExp(search, "i");
+      const rx = new RegExp(search, "i");
+      query.$or = [{ title: rx }, { bundleId: rx }];
     }
 
     const skip = (page - 1) * limit;

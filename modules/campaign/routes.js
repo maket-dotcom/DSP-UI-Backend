@@ -40,13 +40,14 @@ const { RESOURCES, ACTIONS } = require("../userConfig/constant");
  *               goal: { type: string }
  *               status: { type: string, enum: [active, paused] }
  *               currency: { type: string }
+ *               bundleId: { type: string }
  *               budget: { type: string }
  *               dailyBudget: { type: string }
  *               kpi: { type: string }
  *               isScheduling: { type: boolean }
  *               startDate: { type: string, format: date-time }
  *               endDate: { type: string, format: date-time }
- *               mmpPlatform: { type: string }
+ *               mmpPlatform: { type: string, enum: [appsflyer, adjust, branch, singular, apptrove, kochawa, appmetrica, affise] }
  *               ctaUrl: { type: string }
  *               vtaUrl: { type: string }
  *               eventDetails:
@@ -70,6 +71,9 @@ const { RESOURCES, ACTIONS } = require("../userConfig/constant");
  *                     state: { type: string }
  *                     city: { type: string }
  *               audienceTarget: { type: string, enum: [all, custom] }
+ *               customAudienceIds:
+ *                 type: array
+ *                 items: { type: string }
  *               inventoryType: { type: string, enum: [programmatic, oem_premium_partners] }
  *               oemPremiumPartners:
  *                 type: array

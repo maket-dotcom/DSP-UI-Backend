@@ -4,6 +4,7 @@ const {
   TYPE,
   AUDIENCE_TARGET,
   INVENTORY_TYPE,
+  MMP,
 } = require("./constant");
 
 const mediaItem = Joi.object({
@@ -33,6 +34,7 @@ const addCampaign = Joi.object({
     .default(STATUS.PAUSED),
 
   currency: Joi.string().trim().optional(),
+  bundleId: Joi.string().trim().optional(),
   budget: Joi.string().trim().optional(),
   dailyBudget: Joi.string().trim().optional(),
   kpi: Joi.string().trim().optional(),
@@ -41,7 +43,9 @@ const addCampaign = Joi.object({
   startDate: Joi.date().optional(),
   endDate: Joi.date().optional(),
 
-  mmpPlatform: Joi.string().trim().optional(),
+  mmpPlatform: Joi.string()
+    .valid(...Object.values(MMP))
+    .optional(),
   ctaUrl: Joi.string().trim().optional(),
   vtaUrl: Joi.string().trim().optional(),
   eventDetails: Joi.array().items(eventItem).optional(),
@@ -53,6 +57,7 @@ const addCampaign = Joi.object({
   audienceTarget: Joi.string()
     .valid(...Object.values(AUDIENCE_TARGET))
     .optional(),
+  customAudienceIds: Joi.array().items(Joi.string().trim()).optional(),
 
   inventoryType: Joi.string()
     .valid(...Object.values(INVENTORY_TYPE))
@@ -69,6 +74,7 @@ const updateCampaign = Joi.object({
   status: Joi.string().valid(STATUS.ACTIVE, STATUS.PAUSED).optional(),
 
   currency: Joi.string().trim().optional(),
+  bundleId: Joi.string().trim().optional(),
   budget: Joi.string().trim().optional(),
   dailyBudget: Joi.string().trim().optional(),
   kpi: Joi.string().trim().optional(),
@@ -77,7 +83,9 @@ const updateCampaign = Joi.object({
   startDate: Joi.date().optional(),
   endDate: Joi.date().optional(),
 
-  mmpPlatform: Joi.string().trim().optional(),
+  mmpPlatform: Joi.string()
+    .valid(...Object.values(MMP))
+    .optional(),
   ctaUrl: Joi.string().trim().optional(),
   vtaUrl: Joi.string().trim().optional(),
   eventDetails: Joi.array().items(eventItem).optional(),
@@ -89,6 +97,7 @@ const updateCampaign = Joi.object({
   audienceTarget: Joi.string()
     .valid(...Object.values(AUDIENCE_TARGET))
     .optional(),
+  customAudienceIds: Joi.array().items(Joi.string().trim()).optional(),
 
   inventoryType: Joi.string()
     .valid(...Object.values(INVENTORY_TYPE))

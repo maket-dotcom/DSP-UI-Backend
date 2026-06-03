@@ -50,6 +50,7 @@ var campaignSchema = new mongoose.Schema(
     status: String,
 
     currency: String,
+    bundleId: String,
     budget: String,
     dailyBudget: String,
     kpi: String,
@@ -70,7 +71,7 @@ var campaignSchema = new mongoose.Schema(
     audienceTarget: { type: String, enum: ['all', 'custom'] },
     // for now commenting this
     // we will create a module for custom audience and add theri ids here 
-    //customAudienceIds: [String],
+    customAudienceIds: [String],
 
     inventoryType: { type: String, enum: ['programmatic', 'oem_premium_partners'] },
     // if inventoryType is  oem_premium_partners so we use add ids of all in below array
