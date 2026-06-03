@@ -43,6 +43,13 @@ module.exports = {
     KOCHAWA: "kochawa",
     APPMETRICA: "appmetrica",
     AFFISE: "affise",
+  },
+
+  DATA_MAPPING: {
+    title: "Title",
+    goal: "Goal",
+    budget: "Budget",
+    dailyBudget: "Daily Budget",
   }
 
 };

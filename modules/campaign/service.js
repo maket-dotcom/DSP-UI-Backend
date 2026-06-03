@@ -1,6 +1,6 @@
 const campaignModel = require("./model");
 const { isUndefinedOrNull } = require("../../utils/validators");
-const { STATUS } = require("./constant");
+const { STATUS, DATA_MAPPING } = require("./constant");
 require("dotenv").config();
 
 const campaignService = {
@@ -36,6 +36,7 @@ const campaignService = {
     ]);
 
     return {
+      dataMapping: DATA_MAPPING,
       data: campaigns,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
