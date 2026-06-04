@@ -7,6 +7,7 @@ var aggregateMetricsSchema = new mongoose.Schema(
     {
         orgId: String,
         campaignId: String,
+        pubId: String,
         bidCount: String,
         unitBidPrice: String,
         eventName: String,
