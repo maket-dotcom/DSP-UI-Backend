@@ -47,6 +47,7 @@ module.exports = {
 
   DATA_MAPPING: {
     title: "Title",
+    status: "Status",
     goal: "Goal",
     budget: "Budget",
     dailyBudget: "Daily Budget",
