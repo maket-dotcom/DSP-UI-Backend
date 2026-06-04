@@ -275,6 +275,8 @@ const aggregateMetricsService = {
 
   // Top Campaigns table: per-campaign click/install/events/spent, joined to
   // the campaign's title + status, sorted by `sortBy`, limited to `limit`.
+  // If fewer than `limit` campaigns have metrics in the range, pad the list
+  // with active campaigns (zeroed metrics) so the table always returns `limit`.
   getTopCampaigns: async ({ data, reqBy }) => {
     const orgId = reqBy.org_id;
     const sortBy = data.sortBy || "spent";
@@ -320,6 +322,32 @@ const aggregateMetricsService = {
         },
       },
     ]);
+
+    // Pad up to `limit` with active campaigns that have no metrics in the range.
+    if (rows.length < limit) {
+      const usedIds = rows.map((r) => String(r.campaignId));
+      const fillers = await campaignModel
+        .find({
+          orgId,
+          status: CAMPAIGN_STATUS.ACTIVE,
+          _id: { $nin: usedIds },
+        })
+        .select({ title: 1, status: 1 })
+        .sort({ createdAt: -1 })
+        .limit(limit - rows.length);
+
+      fillers.forEach((c) => {
+        rows.push({
+          campaignId: String(c._id),
+          title: c.title,
+          status: c.status,
+          click: 0,
+          install: 0,
+          events: 0,
+          spent: 0,
+        });
+      });
+    }
 
     return { range, sortBy, data: rows };
   },
