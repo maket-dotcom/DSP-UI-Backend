@@ -56,7 +56,8 @@ const options = {
     "./modules/userConfig/routes.js",
     "./modules/media/routes.js",
     "./modules/campaign/routes.js",
-    "./modules/organization/routes.js"
+    "./modules/organization/routes.js",
+    "./modules/aggregate-metrics/routes.js"
   ],
 };
 
