@@ -14,11 +14,7 @@ var orgSchema = new mongoose.Schema(
       logoUrl: { type: String, default: null },
       logoUrlId: { type: String, default: null },
       themeColor: { type: String, default: null },
-    },
-    accessConfig: {
-      crm: { type: Boolean, default: true },
-      tracking: { type: Boolean, default: true },
-    },
+    }
   },
   { timestamps: true }
 );

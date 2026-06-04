@@ -29,10 +29,6 @@ const addOrganization = async ({ data }) => {
     logoUrlId: null,
     themeColor: null,
   }
-  org.accessConfig = {
-    crm: true,
-    tracking: true
-  }
 
   const result = await org.save();
   return result;
