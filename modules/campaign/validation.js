@@ -37,7 +37,7 @@ const addCampaign = Joi.object({
   currency: Joi.string().trim().optional(),
   bundleId: Joi.string().trim().optional(),
 
-  // Mobile campaigns: appName + appOs are required and appIconUrl (the external
+  // Mobile campaigns: appName + appOs are required and appIconLink (the external
   // store icon URL) is downloaded into our bucket on save.
   appName: Joi.when("type", {
     is: TYPE.MOBILE,
@@ -53,7 +53,7 @@ const addCampaign = Joi.object({
       .valid(...Object.values(APP_PLATFORM))
       .optional(),
   }),
-  appIconUrl: Joi.string().uri().trim().optional(),
+  appIconLink: Joi.string().uri().trim().optional(),
 
   budget: Joi.string().trim().optional(),
   dailyBudget: Joi.string().trim().optional(),
@@ -100,7 +100,7 @@ const updateCampaign = Joi.object({
   appOs: Joi.string()
     .valid(...Object.values(APP_PLATFORM))
     .optional(),
-  appIconUrl: Joi.string().uri().trim().optional(),
+  appIconLink: Joi.string().uri().trim().optional(),
 
   budget: Joi.string().trim().optional(),
   dailyBudget: Joi.string().trim().optional(),

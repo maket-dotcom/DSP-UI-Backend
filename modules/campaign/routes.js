@@ -43,7 +43,7 @@ const { RESOURCES, ACTIONS } = require("../userConfig/constant");
  *               bundleId: { type: string }
  *               appName: { type: string, description: "Required when type is mobile" }
  *               appOs: { type: string, enum: [ios, android], description: "Required when type is mobile" }
- *               appIconUrl: { type: string, description: "External app icon URL; downloaded into our bucket, our bucket URL stored in appIconLink" }
+ *               appIconLink: { type: string, description: "External app icon URL; downloaded into our bucket, our bucket URL stored in appIconLink" }
  *               budget: { type: string }
  *               dailyBudget: { type: string }
  *               kpi: { type: string }

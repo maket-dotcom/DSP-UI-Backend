@@ -36,14 +36,14 @@ const campaignService = {
     // our bucket URL in appIconLink.
     if (
       payload.type === TYPE.MOBILE &&
-      !isUndefinedOrNull(payload.appIconUrl)
+      !isUndefinedOrNull(payload.appIconLink)
     ) {
       payload.appIconLink = await uploadAppIcon({
-        url: payload.appIconUrl,
+        url: payload.appIconLink,
         orgId: reqBy.org_id,
       });
     }
-    delete payload.appIconUrl; // never store the external URL
+    // delete payload.appIconUrl; // never store the external URL
 
     const campaign = new campaignModel(payload);
     if (isUndefinedOrNull(campaign.status)) {
@@ -113,13 +113,13 @@ const campaignService = {
 
     // If a new app icon URL is supplied, download it into our bucket and store
     // our bucket URL instead.
-    if (!isUndefinedOrNull(payload.appIconUrl)) {
+    if (!isUndefinedOrNull(payload.appIconLink)) {
       payload.appIconLink = await uploadAppIcon({
-        url: payload.appIconUrl,
+        url: payload.appIconLink,
         orgId: reqBy.org_id,
       });
     }
-    delete payload.appIconUrl; // never store the external URL
+    //delete payload.appIconUrl; // never store the external URL
 
     const updated = await campaignModel.findOneAndUpdate(
       { _id: id, orgId: reqBy.org_id, status: { $ne: STATUS.DELETED } },
