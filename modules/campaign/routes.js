@@ -192,6 +192,41 @@ router.patch(
 
 /**
  * @swagger
+ * /api/v1/campaign/status/{id}:
+ *   patch:
+ *     summary: Change a campaign's status (active/paused) within the caller's organisation
+ *     tags: [Campaign]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - status
+ *             properties:
+ *               status: { type: string, enum: [active, paused] }
+ *     responses:
+ *       200:
+ *         description: Campaign status updated successfully
+ */
+router.patch(
+  "/status/:id",
+  auth,
+  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  requirePermission(RESOURCES.CAMPAIGN, ACTIONS.UPDATE),
+  execute(campaignController.changeStatus)
+);
+
+/**
+ * @swagger
  * /api/v1/campaign/delete/{id}:
  *   delete:
  *     summary: Delete (soft) a campaign within the caller's organisation

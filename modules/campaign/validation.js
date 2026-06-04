@@ -107,6 +107,10 @@ const updateCampaign = Joi.object({
   media: Joi.array().items(mediaItem).optional(),
 }).min(1);
 
+const changeStatus = Joi.object({
+  status: Joi.string().valid(STATUS.ACTIVE, STATUS.PAUSED).required(),
+});
+
 const listCampaign = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
@@ -120,5 +124,6 @@ const listCampaign = Joi.object({
 module.exports = {
   addCampaign,
   updateCampaign,
+  changeStatus,
   listCampaign,
 };

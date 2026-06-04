@@ -27,6 +27,12 @@ const campaignController = {
     return r;
   },
 
+  changeStatus: async (req, res) => {
+    const data = validateInfo(validate.changeStatus, req.body);
+    r = await campaignService.changeStatus({ id: req.params.id, data, reqBy: req.user });
+    return r;
+  },
+
   remove: async (req, res) => {
     r = await campaignService.deleteCampaign({ id: req.params.id, reqBy: req.user });
     return r;

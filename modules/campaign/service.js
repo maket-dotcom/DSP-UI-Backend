@@ -62,6 +62,20 @@ const campaignService = {
     return { message: "Campaign updated successfully", data: updated };
   },
 
+  // toggle a campaign between active/paused within the requester's org
+  // (soft-deleted campaigns can't be reactivated)
+  changeStatus: async ({ id, data, reqBy }) => {
+    const updated = await campaignModel.findOneAndUpdate(
+      { _id: id, orgId: reqBy.org_id, status: { $ne: STATUS.DELETED } },
+      { $set: { status: data.status } },
+      { new: true }
+    );
+    if (isUndefinedOrNull(updated)) {
+      throw new Error("Invalid campaign id " + id);
+    }
+    return { message: "Campaign status updated successfully", data: updated };
+  },
+
   // soft delete: marks the campaign as deleted within the requester's org
   deleteCampaign: async ({ id, reqBy }) => {
     const deleted = await campaignModel.findOneAndUpdate(
