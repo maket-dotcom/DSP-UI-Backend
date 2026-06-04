@@ -42,6 +42,17 @@ const campaignService = {
     };
   },
 
+  // lightweight list for dropdowns: all non-deleted campaigns in the requester's
+  // org as { id, value } pairs (value = campaign title)
+  listCampaignOptions: async ({ reqBy }) => {
+    const campaigns = await campaignModel
+      .find({ orgId: reqBy.org_id, status: { $ne: STATUS.DELETED } })
+      .select({ title: 1 })
+      .sort({ createdAt: -1 });
+
+    return campaigns.map((c) => ({ id: c._id, value: c.title }));
+  },
+
   getCampaign: async ({ id, reqBy }) => {
     const campaign = await campaignModel.findOne({ _id: id, orgId: reqBy.org_id });
     if (isUndefinedOrNull(campaign)) {

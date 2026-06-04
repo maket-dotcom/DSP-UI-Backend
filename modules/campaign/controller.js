@@ -16,6 +16,11 @@ const campaignController = {
     return r;
   },
 
+  options: async (req, res) => {
+    r = await campaignService.listCampaignOptions({ reqBy: req.user });
+    return r;
+  },
+
   get: async (req, res) => {
     r = await campaignService.getCampaign({ id: req.params.id, reqBy: req.user });
     return r;

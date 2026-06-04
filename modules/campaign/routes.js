@@ -136,6 +136,35 @@ router.get(
 
 /**
  * @swagger
+ * /api/v1/campaign/options:
+ *   get:
+ *     summary: List all campaigns in the caller's organisation as { id, value } pairs (for dropdowns)
+ *     tags: [Campaign]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Campaign options fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id: { type: string }
+ *                   value: { type: string }
+ */
+router.get(
+  "/options",
+  auth,
+  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  requirePermission(RESOURCES.CAMPAIGN, ACTIONS.VIEW),
+  execute(campaignController.options)
+);
+
+/**
+ * @swagger
  * /api/v1/campaign/get/{id}:
  *   get:
  *     summary: Get a campaign by id within the caller's organisation
