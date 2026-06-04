@@ -16,6 +16,12 @@ const campaignController = {
     return r;
   },
 
+  appDetails: async (req, res) => {
+    const data = validateInfo(validate.appLookup, req.query);
+    r = await campaignService.getAppDetails({ data, reqBy: req.user });
+    return r;
+  },
+
   options: async (req, res) => {
     r = await campaignService.listCampaignOptions({ reqBy: req.user });
     return r;

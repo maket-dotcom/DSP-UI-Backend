@@ -41,6 +41,9 @@ const { RESOURCES, ACTIONS } = require("../userConfig/constant");
  *               status: { type: string, enum: [active, paused] }
  *               currency: { type: string }
  *               bundleId: { type: string }
+ *               appName: { type: string, description: "Required when type is mobile" }
+ *               appOs: { type: string, enum: [ios, android], description: "Required when type is mobile" }
+ *               appIconUrl: { type: string, description: "External app icon URL; downloaded into our bucket, our bucket URL stored in appIconLink" }
  *               budget: { type: string }
  *               dailyBudget: { type: string }
  *               kpi: { type: string }
@@ -132,6 +135,60 @@ router.get(
   accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
   requirePermission(RESOURCES.CAMPAIGN, ACTIONS.VIEW),
   execute(campaignController.list)
+);
+
+/**
+ * @swagger
+ * /api/v1/campaign/app-details:
+ *   get:
+ *     summary: Look up an app's store URL and details by its bundle id / package name (App Store or Play Store)
+ *     tags: [Campaign]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: bundleId
+ *         required: true
+ *         schema: { type: string, example: "com.whatsapp" }
+ *         description: App package name (Android) or bundle identifier (iOS)
+ *       - in: query
+ *         name: platform
+ *         schema: { type: string, enum: [ios, android] }
+ *         description: Optional. If omitted, the App Store is tried first, then the Play Store.
+ *       - in: query
+ *         name: country
+ *         schema: { type: string, example: "gb" }
+ *         description: Optional iOS storefront (ISO 2-letter code). If omitted, the busiest storefronts are swept (region-locked apps still resolve).
+ *     responses:
+ *       200:
+ *         description: App details fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 platform: { type: string, enum: [ios, android] }
+ *                 store: { type: string, enum: [app_store, play_store] }
+ *                 country: { type: string, description: "Matched iOS storefront (null for Android)" }
+ *                 bundleId: { type: string }
+ *                 appId: { type: string }
+ *                 title: { type: string }
+ *                 url: { type: string }
+ *                 iconUrl: { type: string }
+ *                 developer: { type: string }
+ *                 category: { type: string }
+ *                 rating: { type: number }
+ *                 ratingCount: { type: number }
+ *                 price: { type: string }
+ *                 version: { type: string }
+ *                 description: { type: string }
+ */
+router.get(
+  "/app-details",
+  auth,
+  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  requirePermission(RESOURCES.CAMPAIGN, ACTIONS.VIEW),
+  execute(campaignController.appDetails)
 );
 
 /**

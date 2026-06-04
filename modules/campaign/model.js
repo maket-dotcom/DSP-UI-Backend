@@ -51,6 +51,9 @@ var campaignSchema = new mongoose.Schema(
 
     currency: String,
     bundleId: String,
+    appOs: String,
+    appName: String,
+    appIconLink: String,
     budget: String,
     dailyBudget: String,
     kpi: String,

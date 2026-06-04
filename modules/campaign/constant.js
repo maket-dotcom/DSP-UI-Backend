@@ -34,6 +34,11 @@ module.exports = {
     OEM_PREMIUM_PARTNERS: 'oem_premium_partners',
   },
 
+  APP_PLATFORM: {
+    IOS: "ios",
+    ANDROID: "android",
+  },
+
   MMP: {
     APPSFLYER: "appsflyer",
     ADJUST: "adjust",

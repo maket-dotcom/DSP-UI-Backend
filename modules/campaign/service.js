@@ -1,15 +1,51 @@
+const path = require("path");
+const { v4: uuidv4 } = require("uuid");
 const campaignModel = require("./model");
 const { isUndefinedOrNull } = require("../../utils/validators");
-const { STATUS, DATA_MAPPING } = require("./constant");
+const { appStore } = require("../../utils/appStore");
+const { gcs } = require("../../utils/gcs");
+const { STATUS, TYPE, DATA_MAPPING } = require("./constant");
 require("dotenv").config();
+
+// Download an external app-icon URL and store it in our GCS bucket,
+// returning our bucket URL (never the external one).
+const uploadAppIcon = async ({ url, orgId }) => {
+  let ext = "";
+  try {
+    ext = path.extname(new URL(url).pathname);
+  } catch (e) {
+    ext = "";
+  }
+  if (isUndefinedOrNull(ext) || ext === "") ext = ".png";
+
+  const destinationPath = `campaign/org_${orgId}/app_icons/${uuidv4()}${ext}`;
+  const { url: bucketUrl } = await gcs.uploadFromUrl({
+    url,
+    destinationPath,
+    makePublic: true,
+  });
+  return bucketUrl;
+};
 
 const campaignService = {
 
   addCampaign: async ({ data, reqBy }) => {
-    const campaign = new campaignModel({
-      ...data,
-      orgId: reqBy.org_id,
-    });
+    const payload = { ...data, orgId: reqBy.org_id };
+
+    // Mobile campaigns: pull the provided app icon into our bucket and persist
+    // our bucket URL in appIconLink.
+    if (
+      payload.type === TYPE.MOBILE &&
+      !isUndefinedOrNull(payload.appIconUrl)
+    ) {
+      payload.appIconLink = await uploadAppIcon({
+        url: payload.appIconUrl,
+        orgId: reqBy.org_id,
+      });
+    }
+    delete payload.appIconUrl; // never store the external URL
+
+    const campaign = new campaignModel(payload);
     if (isUndefinedOrNull(campaign.status)) {
       campaign.status = STATUS.PAUSED;
     }
@@ -53,6 +89,17 @@ const campaignService = {
     return campaigns.map((c) => ({ id: c._id, value: c.title }));
   },
 
+  // resolve an app's store URL + details from its bundleId / package name.
+  // platform is optional; when omitted, App Store then Play Store are tried.
+  getAppDetails: async ({ data }) => {
+    const app = await appStore.lookupApp({
+      bundleId: data.bundleId,
+      platform: data.platform,
+      country: data.country,
+    });
+    return { data: app };
+  },
+
   getCampaign: async ({ id, reqBy }) => {
     const campaign = await campaignModel.findOne({ _id: id, orgId: reqBy.org_id });
     if (isUndefinedOrNull(campaign)) {
@@ -62,9 +109,21 @@ const campaignService = {
   },
 
   updateCampaign: async ({ id, data, reqBy }) => {
+    const payload = { ...data };
+
+    // If a new app icon URL is supplied, download it into our bucket and store
+    // our bucket URL instead.
+    if (!isUndefinedOrNull(payload.appIconUrl)) {
+      payload.appIconLink = await uploadAppIcon({
+        url: payload.appIconUrl,
+        orgId: reqBy.org_id,
+      });
+    }
+    delete payload.appIconUrl; // never store the external URL
+
     const updated = await campaignModel.findOneAndUpdate(
       { _id: id, orgId: reqBy.org_id, status: { $ne: STATUS.DELETED } },
-      { $set: data },
+      { $set: payload },
       { new: true }
     );
     if (isUndefinedOrNull(updated)) {

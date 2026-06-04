@@ -5,6 +5,7 @@ const {
   AUDIENCE_TARGET,
   INVENTORY_TYPE,
   MMP,
+  APP_PLATFORM,
 } = require("./constant");
 
 const mediaItem = Joi.object({
@@ -35,6 +36,25 @@ const addCampaign = Joi.object({
 
   currency: Joi.string().trim().optional(),
   bundleId: Joi.string().trim().optional(),
+
+  // Mobile campaigns: appName + appOs are required and appIconUrl (the external
+  // store icon URL) is downloaded into our bucket on save.
+  appName: Joi.when("type", {
+    is: TYPE.MOBILE,
+    then: Joi.string().trim().required(),
+    otherwise: Joi.string().trim().optional(),
+  }),
+  appOs: Joi.when("type", {
+    is: TYPE.MOBILE,
+    then: Joi.string()
+      .valid(...Object.values(APP_PLATFORM))
+      .required(),
+    otherwise: Joi.string()
+      .valid(...Object.values(APP_PLATFORM))
+      .optional(),
+  }),
+  appIconUrl: Joi.string().uri().trim().optional(),
+
   budget: Joi.string().trim().optional(),
   dailyBudget: Joi.string().trim().optional(),
   kpi: Joi.string().trim().optional(),
@@ -75,6 +95,13 @@ const updateCampaign = Joi.object({
 
   currency: Joi.string().trim().optional(),
   bundleId: Joi.string().trim().optional(),
+
+  appName: Joi.string().trim().optional(),
+  appOs: Joi.string()
+    .valid(...Object.values(APP_PLATFORM))
+    .optional(),
+  appIconUrl: Joi.string().uri().trim().optional(),
+
   budget: Joi.string().trim().optional(),
   dailyBudget: Joi.string().trim().optional(),
   kpi: Joi.string().trim().optional(),
@@ -111,6 +138,16 @@ const changeStatus = Joi.object({
   status: Joi.string().valid(STATUS.ACTIVE, STATUS.PAUSED).required(),
 });
 
+// Look up an app's details by its store bundle id / package name.
+const appLookup = Joi.object({
+  bundleId: Joi.string().trim().required(),
+  platform: Joi.string()
+    .valid(...Object.values(APP_PLATFORM))
+    .optional(),
+  // iOS storefront (ISO country code). Omit to auto-sweep busiest storefronts.
+  country: Joi.string().trim().lowercase().length(2).optional(),
+});
+
 const listCampaign = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
@@ -125,5 +162,6 @@ module.exports = {
   addCampaign,
   updateCampaign,
   changeStatus,
+  appLookup,
   listCampaign,
 };

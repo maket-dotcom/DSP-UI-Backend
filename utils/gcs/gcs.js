@@ -1,7 +1,10 @@
 const { Storage } = require("@google-cloud/storage");
+const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
+
+const MAX_REMOTE_FILE_BYTES = 25 * 1024 * 1024; // 25 MB safety cap
 
 const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME;
 const GCS_KEY_FILE = process.env.GCS_KEY_FILE; // path to service account JSON key file
@@ -123,6 +126,41 @@ const uploadBuffer = async ({
 };
 
 /**
+ * Download a remote file (by URL) and upload it into the bucket.
+ *
+ * @param {string} url - The remote file URL to download
+ * @param {string} destinationPath - The full path inside the bucket (folder + fileName)
+ * @param {boolean} makePublic - Whether to expose a public URL (default: true)
+ * @returns {Object} { url, gcsPath, bucket, contentType }
+ */
+const uploadFromUrl = async ({ url, destinationPath, makePublic = true }) => {
+  let response;
+  try {
+    response = await axios.get(url, {
+      responseType: "arraybuffer",
+      timeout: 20000,
+      maxContentLength: MAX_REMOTE_FILE_BYTES,
+      maxBodyLength: MAX_REMOTE_FILE_BYTES,
+    });
+  } catch (error) {
+    console.error("[GCS] Error downloading remote file:", error.message);
+    throw new Error(`Failed to download file from URL: ${error.message}`);
+  }
+
+  const buffer = Buffer.from(response.data);
+  const contentType =
+    response.headers["content-type"] || "application/octet-stream";
+
+  const result = await uploadBuffer({
+    buffer,
+    destinationPath,
+    contentType,
+    makePublic,
+  });
+  return { ...result, contentType };
+};
+
+/**
  * Delete a file from GCS bucket.
  *
  * @param {string} destinationPath - The full path inside the bucket
@@ -184,6 +222,7 @@ const deleteLocalFile = (filePath) => {
 module.exports = {
   uploadFile,
   uploadBuffer,
+  uploadFromUrl,
   deleteFile,
   getSignedUrl,
   fileExists,
