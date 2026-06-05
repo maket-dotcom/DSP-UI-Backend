@@ -1,3 +1,5 @@
+const { update } = require("lodash");
+
 module.exports = {
   TYPE: {
     SUPER_ADMIN: "super_admin",
@@ -22,6 +24,7 @@ module.exports = {
     type: "Role",
     status: "Status",
     createdAt: "Created At",
+    updatedAt: "Updated At",
   },
 
   CATEGORY_ARRAY: [
