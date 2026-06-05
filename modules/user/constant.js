@@ -1,3 +1,5 @@
+const { update } = require("lodash");
+
 module.exports = {
   TYPE: {
     SUPER_ADMIN: "super_admin",
@@ -9,6 +11,20 @@ module.exports = {
     ACTIVE: "active",
     INACTIVE: "inactive",
     DELETED: "deleted",
+  },
+
+  DATA_MAPPING: {
+    name: "Name",
+    email: "Email",
+    // secondaryEmails: "Secondary Emails",
+    mobile: "Mobile",
+    gender: "Gender",
+    age: "Age",
+    address: "Address",
+    type: "Role",
+    status: "Status",
+    createdAt: "Created At",
+    updatedAt: "Updated At",
   },
 
   CATEGORY_ARRAY: [
