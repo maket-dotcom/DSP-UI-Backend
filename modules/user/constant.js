@@ -11,6 +11,19 @@ module.exports = {
     DELETED: "deleted",
   },
 
+  DATA_MAPPING: {
+    name: "Name",
+    email: "Email",
+    secondaryEmails: "Secondary Emails",
+    mobile: "Mobile",
+    gender: "Gender",
+    age: "Age",
+    address: "Address",
+    type: "Role",
+    status: "Status",
+    createdAt: "Created At",
+  },
+
   CATEGORY_ARRAY: [
     "lifestyle",
     "fashion",

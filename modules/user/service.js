@@ -2,7 +2,7 @@ const userDetailsModel = require("./model");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { isUndefinedOrNull } = require("../../utils/validators");
-const { TYPE, STATUS } = require('./constant');
+const { TYPE, STATUS, DATA_MAPPING } = require('./constant');
 const { generateOTP } = require("../../utils/common");
 const sendMail = require('../../utils/notification/email/send');
 const { RedisCacheKey } = require("../../connection/redis");
@@ -264,6 +264,7 @@ const userService = {
     ]);
 
     return {
+      dataMapping: DATA_MAPPING,
       data: users,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
