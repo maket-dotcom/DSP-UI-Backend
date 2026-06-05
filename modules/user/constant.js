@@ -14,7 +14,7 @@ module.exports = {
   DATA_MAPPING: {
     name: "Name",
     email: "Email",
-    secondaryEmails: "Secondary Emails",
+    // secondaryEmails: "Secondary Emails",
     mobile: "Mobile",
     gender: "Gender",
     age: "Age",
