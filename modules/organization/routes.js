@@ -68,9 +68,9 @@ router.get("/config", execute(orgController.getOrgConfig));
 
 /**
  * @swagger
- * /api/v1/org/config:
+ * /api/v1/org/config-by-id:
  *   get:
- *     summary: get org open end point config
+ *     summary: get org config for the authenticated caller's organisation (from token)
  *     tags: [Organization]
  *     security:
  *       - bearerAuth: []
