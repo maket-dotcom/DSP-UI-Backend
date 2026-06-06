@@ -130,6 +130,17 @@ const getOrgConfig = async ({ subdomain }) => {
   }
 }
 
+const getOrgConfigById = async ({ orgId }) => {
+  const orgData = await getOrgByIDAndCache(orgId)
+  if (isUndefinedOrNull(orgData)) {
+    throw new Error('Org not registred');
+  }
+  return {
+    orgData
+  }
+}
+
+
 
 module.exports = {
   addOrganization,
@@ -138,5 +149,6 @@ module.exports = {
   getOrgBySubdomainAndCache,
   update,
   get,
-  getOrgConfig
+  getOrgConfig,
+  getOrgConfigById
 };

@@ -23,5 +23,11 @@ const orgController = {
     return r;
   },
 
+  getOrgConfigById: async (req, res) => {
+    const orgId = req.user?.org_id;
+    r = await orgService.getOrgConfigById({ orgId });
+    return r;
+  },
+
 };
 module.exports = orgController;

@@ -66,5 +66,21 @@ router.get("/get", auth, accessAllowed([TYPE.ADMIN, TYPE.TEAM]), execute(orgCont
  */
 router.get("/config", execute(orgController.getOrgConfig));
 
+/**
+ * @swagger
+ * /api/v1/org/config:
+ *   get:
+ *     summary: get org open end point config
+ *     tags: [Organization]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: org config fetched successfully
+ */
+router.get("/config-by-id", auth, accessAllowed([TYPE.ADMIN, TYPE.TEAM]), execute(orgController.getOrgConfigById));
+
+
+
 
 module.exports = router;
