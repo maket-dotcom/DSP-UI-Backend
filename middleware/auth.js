@@ -25,7 +25,7 @@ const getOrgByIDAndCache = async (id) => {
   if (!isUndefinedOrNull(data)) {
     return JSON.parse(data);
   }
- 
+
   const query = {
     _id: id,
   };
@@ -48,7 +48,7 @@ const getUserByIDAndCache = async (id) => {
   if (!isUndefinedOrNull(data)) {
     return JSON.parse(data);
   }
- 
+
   const query = {
     _id: id,
   };
@@ -68,7 +68,7 @@ const getUserByIDAndCache = async (id) => {
 
 const verifyToken = async (req, res, next) => {
   const authHeader =
-    req?.body.token || req?.query.token || req?.headers["authorization"];  
+    req?.body.token || req?.query.token || req?.headers["authorization"];
   if (isUndefinedOrNull(authHeader)) {
     return res.status(403).send("A token is required for authentication");
   }
@@ -126,9 +126,9 @@ const verifyToken = async (req, res, next) => {
       }
       const user = await getUserByIDAndCache(userId);
       const org = await getOrgByIDAndCache(orgId);
-      if (subdomain != org.subdomain) {
-        return res.status(403).send("Host client domain is not allowd to make requst");
-      }
+      // if (subdomain != org.subdomain) {
+      //   return res.status(403).send("Host client domain is not allowd to make requst");
+      // }
     }
 
   }
