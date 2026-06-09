@@ -17,6 +17,12 @@ const orgController = {
     return r;
   },
 
+
+  getOrgList: async (req, res) => {
+    r = await orgService.getOrgList();
+    return r;
+  },
+
   getOrgConfig: async (req, res) => {
     const subdomain = getSubdomain(req?.headers?.origin);
     r = await orgService.getOrgConfig({ subdomain });

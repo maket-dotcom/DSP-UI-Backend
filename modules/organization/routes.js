@@ -56,6 +56,18 @@ router.get("/get", auth, accessAllowed([TYPE.ADMIN, TYPE.TEAM]), execute(orgCont
 
 /**
  * @swagger
+ * /api/v1/org/list:
+ *   get:
+ *     summary: get org list
+ *     tags: [Organization]
+ *     responses:
+ *       200:
+ *         description: org config fetched successfully
+ */
+router.get("/list", execute(orgController.getOrgList));
+
+/**
+ * @swagger
  * /api/v1/org/config:
  *   get:
  *     summary: get org open end point config

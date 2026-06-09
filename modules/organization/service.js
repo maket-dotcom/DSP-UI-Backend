@@ -118,6 +118,20 @@ const get = async ({ reqBy }) => {
   }
 }
 
+const getOrgList = async () => {
+  const orgData = await organizationModel.find({}, { _id: 1, name: 1 });
+  const details = [];
+  _.each(orgData, (org) => {
+    details.push({
+      key: org._id,
+      value: org.name
+    })
+  })
+  return {
+    details
+  }
+}
+
 const getOrgConfig = async ({ subdomain }) => {
   if (isUndefinedOrNull(subdomain))
     subdomain = 'ads';
@@ -150,5 +164,6 @@ module.exports = {
   update,
   get,
   getOrgConfig,
-  getOrgConfigById
+  getOrgConfigById,
+  getOrgList
 };
