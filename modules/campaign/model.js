@@ -17,6 +17,14 @@ const mediaSchema = new Schema(
       type: String,
       default: null,
     },
+    w: {
+      type: Number,
+      default: null,
+    },
+    h: {
+      type: Number,
+      default: null,
+    }
   },
   { _id: false }
 );

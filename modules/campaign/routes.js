@@ -89,6 +89,8 @@ const { RESOURCES, ACTIONS } = require("../userConfig/constant");
  *                     id: { type: string }
  *                     link: { type: string }
  *                     type: { type: string }
+ *                     w: { type: number }
+ *                     h: { type: number }
  *     responses:
  *       200:
  *         description: Campaign created successfully

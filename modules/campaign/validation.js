@@ -12,6 +12,8 @@ const mediaItem = Joi.object({
   id: Joi.string().trim().optional(),
   link: Joi.string().trim().optional(),
   type: Joi.string().trim().optional(),
+  w: Joi.number().optional(),
+  h: Joi.number().optional(),
 });
 
 const eventItem = Joi.object({
