@@ -90,6 +90,7 @@ const createUser = Joi.object({
   age: Joi.number().optional(),
   address: Joi.string().optional(),
   status: Joi.string().valid(...Object.values(STATUS)).optional(),
+  profilePic: Joi.string().uri().optional(),
 });
 
 const updateUser = Joi.object({
@@ -100,7 +101,12 @@ const updateUser = Joi.object({
   age: Joi.number().optional(),
   address: Joi.string().optional(),
   status: Joi.string().valid(...Object.values(STATUS)).optional(),
+  profilePic: Joi.string().uri().optional(),
 }).min(1);
+
+const updateProfilePic = Joi.object({
+  profilePic: Joi.string().uri().required(),
+});
 
 const listUsers = Joi.object({
   page: Joi.number().integer().min(1).default(1),
@@ -116,5 +122,6 @@ module.exports = {
   createOrgWithAdmin,
   createUser,
   updateUser,
+  updateProfilePic,
   listUsers,
 };

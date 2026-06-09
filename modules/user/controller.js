@@ -30,6 +30,16 @@ const userController = {
     return r;
   },
 
+  getProfile: async (req, res) => {
+    r = await userService.getProfile({ reqBy: req.user });
+    return r;
+  },
+
+  updateProfilePic: async (req, res) => {
+    r = await userService.updateProfilePic({ files: req.files, reqBy: req.user });
+    return r;
+  },
+
   listUsers: async (req, res) => {
     const data = validateInfo(validate.listUsers, req.query);
     r = await userService.listUsers({ data, reqBy: req.user });
