@@ -184,6 +184,55 @@ router.post(
 
 /**
  * @swagger
+ * /api/v1/user/profile:
+ *   get:
+ *     summary: Get profile details of the current logged-in user
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile fetched successfully
+ */
+router.get(
+  "/profile",
+  auth,
+  execute(userController.getProfile)
+);
+
+/**
+ * @swagger
+ * /api/v1/user/update-profile-pic:
+ *   patch:
+ *     summary: Update profile picture of the current logged-in user
+ *     tags: [User]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - profilePic
+ *             properties:
+ *               profilePic:
+ *                 type: string
+ *                 description: URL of the uploaded profile picture
+ *     responses:
+ *       200:
+ *         description: User profile picture updated successfully
+ */
+router.patch(
+  "/update-profile-pic",
+  auth,
+  imageUpload(['image']),
+  execute(userController.updateProfilePic)
+);
+
+/**
+ * @swagger
  * /api/v1/user/list:
  *   get:
  *     summary: List users within the caller's organisation

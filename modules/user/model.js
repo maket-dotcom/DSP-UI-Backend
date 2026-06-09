@@ -18,7 +18,8 @@ var userSchema = new mongoose.Schema(
     status: String,
     isVerified: Boolean,
     address: String,
-    password: String
+    password: String,
+    profilePic: String
   },
   { timestamps: true }
 );

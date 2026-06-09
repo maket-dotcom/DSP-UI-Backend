@@ -2,6 +2,7 @@ const userDetailsModel = require("./model");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { isUndefinedOrNull } = require("../../utils/validators");
+const { gcs } = require("../../utils/gcs");
 const { TYPE, STATUS, DATA_MAPPING } = require('./constant');
 const { generateOTP } = require("../../utils/common");
 const sendMail = require('../../utils/notification/email/send');
@@ -202,7 +203,7 @@ const userService = {
 
   // admin/team creates a user inside their own org
   createUser: async ({ data, reqBy }) => {
-    let { name, email, mobile, password, type, gender, age, address, status } = data;
+    let { name, email, mobile, password, type, gender, age, address, status, profilePic } = data;
     if (isUndefinedOrNull(type)) type = TYPE.TEAM;
 
     // a team member may not create an admin user
@@ -230,6 +231,7 @@ const userService = {
     user.age = age;
     user.address = address;
     user.status = isUndefinedOrNull(status) ? STATUS.ACTIVE : status;
+    user.profilePic = profilePic;
     user.isVerified = false;
     user.password = await bcrypt.hash(password, 10);
     const savedUser = await user.save();
@@ -296,7 +298,7 @@ const userService = {
       throw new Error("You are not allowed to assign the admin role");
     }
 
-    const allowed = ["name", "mobile", "type", "gender", "age", "address", "status"];
+    const allowed = ["name", "mobile", "type", "gender", "age", "address", "status", "profilePic"];
     const update = {};
     for (const field of allowed) {
       if (!isUndefinedOrNull(data[field])) update[field] = data[field];
@@ -335,6 +337,48 @@ const userService = {
     await RedisCacheKey.deleteKey(getUserCacheKey(userId));
 
     return { message: "User deleted successfully" };
+  },
+
+  getProfile: async ({ reqBy }) => {
+    const userId = reqBy.user_id;
+    const user = await userDetailsModel.findById(userId).select("-password");
+    if (isUndefinedOrNull(user)) {
+      throw new Error("User profile not found");
+    }
+    return { data: user };
+  },
+
+  updateProfilePic: async ({ files, reqBy }) => {
+    const userId = reqBy.user_id;
+    const file = files?.image?.[0];
+    if (isUndefinedOrNull(file) || isUndefinedOrNull(file.buffer)) {
+      throw new Error("No file provided. Attach an image file under the 'image' field.");
+    }
+
+    const folder = `media/org_${reqBy.org_id}/profile`;
+    const fileName = `${uuidv4()}_${String(file.originalname).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const destinationPath = `${folder}/${fileName}`;
+
+    const uploaded = await gcs.uploadBuffer({
+      buffer: file.buffer,
+      destinationPath,
+      contentType: file.mimetype,
+      makePublic: true,
+    });
+
+    const profilePic = uploaded.url;
+
+    const updated = await userDetailsModel
+      .findByIdAndUpdate(userId, { $set: { profilePic } }, { new: true })
+      .select("-password");
+
+    if (isUndefinedOrNull(updated)) {
+      throw new Error("User profile not found");
+    }
+
+    await RedisCacheKey.deleteKey(getUserCacheKey(userId));
+
+    return { message: "Profile picture updated successfully", data: updated };
   },
 
 };
