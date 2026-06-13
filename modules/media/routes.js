@@ -53,7 +53,7 @@ const mediaController = require('./controller');
 router.post(
   "/add",
   auth,
-  accessAllowed([TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
   requirePermission(RESOURCES.MEDIA, ACTIONS.CREATE),
   imageUpload(['image']),
   execute(mediaController.add)
@@ -85,7 +85,7 @@ router.post(
 router.post(
   "/delete-many",
   auth,
-  accessAllowed([TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
   requirePermission(RESOURCES.MEDIA, ACTIONS.DELETE),
   execute(mediaController.removeMany)
 );
@@ -111,7 +111,7 @@ router.post(
 router.delete(
   "/delete/:id",
   auth,
-  accessAllowed([TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
   requirePermission(RESOURCES.MEDIA, ACTIONS.DELETE),
   execute(mediaController.remove)
 );

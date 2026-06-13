@@ -1,5 +1,7 @@
 const aggregateMetricsModel = require("./model");
 const campaignModel = require("../campaign/model");
+const orgModel = require("../organization/model");
+const userDetailsModel = require("../user/model");
 const { isUndefinedOrNull } = require("../../utils/validators");
 const { CORE_EVENTS, METRIC, DATE_PRESET, EVENT_NAME } = require("./constant");
 const {
@@ -127,8 +129,11 @@ const perDocMetric = (metric) => {
   }
 };
 
+// orgId is optional: when null/undefined the match spans ALL orgs (used by the
+// super-admin all-orgs aggregations). Org-scoped callers pass a concrete orgId.
 const buildMatch = (orgId, campaignId, start, end) => {
-  const match = { orgId, date: { $gte: start, $lte: end } };
+  const match = { date: { $gte: start, $lte: end } };
+  if (!isUndefinedOrNull(orgId)) match.orgId = orgId;
   if (!isUndefinedOrNull(campaignId)) match.campaignId = campaignId;
   return match;
 };
@@ -350,6 +355,104 @@ const aggregateMetricsService = {
     }
 
     return { range, sortBy, data: rows };
+  },
+
+  /* ----------------------- super-admin (all orgs) ----------------------- */
+
+  // Top stat cards aggregated across ALL organisations (no orgId filter),
+  // plus platform-wide org & campaign counts.
+  getSuperSummary: async ({ data }) => {
+    const range = resolveRange(data);
+
+    const [cur, prev] = await Promise.all([
+      aggregateTotals({ orgId: null, start: range.startDate, end: range.endDate }),
+      aggregateTotals({
+        orgId: null,
+        start: range.prevStartDate,
+        end: range.prevEndDate,
+      }),
+    ]);
+
+    const [campTotal, campActive, orgTotal] = await Promise.all([
+      campaignModel.countDocuments({ status: { $ne: CAMPAIGN_STATUS.DELETED } }),
+      campaignModel.countDocuments({ status: CAMPAIGN_STATUS.ACTIVE }),
+      orgModel.countDocuments({}),
+    ]);
+
+    return {
+      range,
+      data: {
+        spent: { value: round2(cur.spent), changePct: pctChange(cur.spent, prev.spent) },
+        install: { value: cur.install, changePct: pctChange(cur.install, prev.install) },
+        click: { value: cur.click, changePct: pctChange(cur.click, prev.click) },
+        events: { value: cur.events, changePct: pctChange(cur.events, prev.events) },
+        campaigns: { active: campActive, total: campTotal },
+        orgs: { total: orgTotal },
+      },
+    };
+  },
+
+  // Per-organisation rollup for the super-admin org table: one row per org with
+  // its name/subdomain/admin email, range metrics, and active-campaign count.
+  getOrgBreakdown: async ({ data }) => {
+    const range = resolveRange(data);
+
+    const metricRows = await aggregateMetricsModel.aggregate([
+      { $match: buildMatch(null, null, range.startDate, range.endDate) },
+      {
+        $group: {
+          _id: "$orgId",
+          spent: { $sum: spentExpr },
+          install: { $sum: countIf(EVENT_NAME.INSTALL) },
+          click: { $sum: countIf(EVENT_NAME.CLICK) },
+          events: { $sum: eventsExpr },
+        },
+      },
+    ]);
+    const metricByOrg = {};
+    metricRows.forEach((r) => {
+      metricByOrg[String(r._id)] = r;
+    });
+
+    const activeRows = await campaignModel.aggregate([
+      { $match: { status: CAMPAIGN_STATUS.ACTIVE } },
+      { $group: { _id: "$orgId", count: { $sum: 1 } } },
+    ]);
+    const activeByOrg = {};
+    activeRows.forEach((r) => {
+      activeByOrg[String(r._id)] = r.count;
+    });
+
+    const orgs = await orgModel
+      .find({})
+      .select({ name: 1, subdomain: 1, adminId: 1 });
+
+    const adminIds = orgs.map((o) => o.adminId).filter(Boolean);
+    const admins = await userDetailsModel
+      .find({ _id: { $in: adminIds } })
+      .select({ email: 1 });
+    const emailById = {};
+    admins.forEach((a) => {
+      emailById[String(a._id)] = a.email;
+    });
+
+    const rows = orgs.map((o) => {
+      const id = String(o._id);
+      const m = metricByOrg[id] || {};
+      return {
+        orgId: id,
+        name: o.name,
+        subdomain: o.subdomain,
+        adminEmail: emailById[String(o.adminId)] || null,
+        spent: round2(m.spent || 0),
+        install: m.install || 0,
+        click: m.click || 0,
+        events: m.events || 0,
+        activeCampaigns: activeByOrg[id] || 0,
+      };
+    });
+
+    return { range, data: rows };
   },
 };
 

@@ -98,7 +98,7 @@ const { RESOURCES, ACTIONS } = require("../userConfig/constant");
 router.post(
   "/add",
   auth,
-  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  accessAllowed([USER_TYPE.SUPER_ADMIN, USER_TYPE.ADMIN, USER_TYPE.TEAM]),
   requirePermission(RESOURCES.CAMPAIGN, ACTIONS.CREATE),
   execute(campaignController.add)
 );
@@ -134,7 +134,7 @@ router.post(
 router.get(
   "/list",
   auth,
-  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  accessAllowed([USER_TYPE.SUPER_ADMIN, USER_TYPE.ADMIN, USER_TYPE.TEAM]),
   requirePermission(RESOURCES.CAMPAIGN, ACTIONS.VIEW),
   execute(campaignController.list)
 );
@@ -188,7 +188,7 @@ router.get(
 router.get(
   "/app-details",
   auth,
-  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  accessAllowed([USER_TYPE.SUPER_ADMIN, USER_TYPE.ADMIN, USER_TYPE.TEAM]),
   requirePermission(RESOURCES.CAMPAIGN, ACTIONS.VIEW),
   execute(campaignController.appDetails)
 );
@@ -217,7 +217,7 @@ router.get(
 router.get(
   "/options",
   auth,
-  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  accessAllowed([USER_TYPE.SUPER_ADMIN, USER_TYPE.ADMIN, USER_TYPE.TEAM]),
   requirePermission(RESOURCES.CAMPAIGN, ACTIONS.VIEW),
   execute(campaignController.options)
 );
@@ -242,7 +242,7 @@ router.get(
 router.get(
   "/get/:id",
   auth,
-  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  accessAllowed([USER_TYPE.SUPER_ADMIN, USER_TYPE.ADMIN, USER_TYPE.TEAM]),
   requirePermission(RESOURCES.CAMPAIGN, ACTIONS.VIEW),
   execute(campaignController.get)
 );
@@ -273,7 +273,7 @@ router.get(
 router.patch(
   "/update/:id",
   auth,
-  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  accessAllowed([USER_TYPE.SUPER_ADMIN, USER_TYPE.ADMIN, USER_TYPE.TEAM]),
   requirePermission(RESOURCES.CAMPAIGN, ACTIONS.UPDATE),
   execute(campaignController.update)
 );
@@ -308,7 +308,7 @@ router.patch(
 router.patch(
   "/status/:id",
   auth,
-  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  accessAllowed([USER_TYPE.SUPER_ADMIN, USER_TYPE.ADMIN, USER_TYPE.TEAM]),
   requirePermission(RESOURCES.CAMPAIGN, ACTIONS.UPDATE),
   execute(campaignController.changeStatus)
 );
@@ -333,7 +333,7 @@ router.patch(
 router.delete(
   "/delete/:id",
   auth,
-  accessAllowed([USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  accessAllowed([USER_TYPE.SUPER_ADMIN, USER_TYPE.ADMIN, USER_TYPE.TEAM]),
   requirePermission(RESOURCES.CAMPAIGN, ACTIONS.DELETE),
   execute(campaignController.remove)
 );

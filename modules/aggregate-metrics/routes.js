@@ -50,7 +50,7 @@ const { RESOURCES, ACTIONS } = require("../userConfig/constant");
 router.get(
   "/summary",
   auth,
-  accessAllowed([TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
   requirePermission(RESOURCES.REPORT, ACTIONS.VIEW),
   execute(aggregateMetricsController.getSummary)
 );
@@ -86,7 +86,7 @@ router.get(
 router.get(
   "/performance",
   auth,
-  accessAllowed([TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
   requirePermission(RESOURCES.REPORT, ACTIONS.VIEW),
   execute(aggregateMetricsController.getPerformance)
 );
@@ -119,7 +119,7 @@ router.get(
 router.get(
   "/goal-report",
   auth,
-  accessAllowed([TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
   requirePermission(RESOURCES.REPORT, ACTIONS.VIEW),
   execute(aggregateMetricsController.getGoalReport)
 );
@@ -155,7 +155,7 @@ router.get(
 router.get(
   "/top-campaigns",
   auth,
-  accessAllowed([TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
   requirePermission(RESOURCES.REPORT, ACTIONS.VIEW),
   execute(aggregateMetricsController.getTopCampaigns)
 );

@@ -62,7 +62,7 @@ const { RESOURCES, ACTIONS } = require("../userConfig/constant");
 router.post(
   "/data",
   auth,
-  accessAllowed([TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
   requirePermission(RESOURCES.REPORT, ACTIONS.VIEW),
   execute(reportController.getReport)
 );

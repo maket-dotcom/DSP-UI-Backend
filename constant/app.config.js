@@ -19,6 +19,7 @@ module.exports = {
         // custom headers
         'authorization',
         'X-USER-TYPE',
+        'x-org-id', // super-admin org context (impersonation)
     ],
 
     MAX_UPLOAD_SIZE: 2e+7, // ~ 20MB

@@ -177,7 +177,7 @@ router.post(
 router.post(
   "/create",
   auth,
-  accessAllowed([TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
   requirePermission(RESOURCES.USER, ACTIONS.CREATE),
   execute(userController.createUser)
 );
@@ -262,7 +262,7 @@ router.patch(
 router.get(
   "/list",
   auth,
-  accessAllowed([TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
   requirePermission(RESOURCES.USER, ACTIONS.VIEW),
   execute(userController.listUsers)
 );
@@ -287,7 +287,7 @@ router.get(
 router.get(
   "/get/:id",
   auth,
-  accessAllowed([TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
   requirePermission(RESOURCES.USER, ACTIONS.VIEW),
   execute(userController.getUser)
 );
@@ -335,7 +335,7 @@ router.get(
 router.patch(
   "/update/:id",
   auth,
-  accessAllowed([TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
   requirePermission(RESOURCES.USER, ACTIONS.UPDATE),
   execute(userController.updateUser)
 );
@@ -360,7 +360,7 @@ router.patch(
 router.delete(
   "/delete/:id",
   auth,
-  accessAllowed([TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
   requirePermission(RESOURCES.USER, ACTIONS.DELETE),
   execute(userController.deleteUser)
 );
