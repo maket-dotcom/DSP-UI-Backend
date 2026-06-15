@@ -95,20 +95,24 @@ const lookupIos = async (bundleId, country) => {
   };
 };
 
-// Google Play has no public lookup API; read the store page's metadata tags.
-const lookupAndroid = async (bundleId) => {
+// One Play Store page fetch against a specific storefront (gl). Returns the
+// normalized app object, or null when the app isn't available there.
+const lookupAndroidInCountry = async (bundleId, gl) => {
   const canonicalUrl = playStoreUrl(bundleId);
   let res;
   try {
-    res = await axios.get(`${canonicalUrl}&hl=en&gl=US`, {
-      timeout: REQUEST_TIMEOUT_MS,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; CampaignAppLookup/1.0; +https://mraket.io)",
-      },
-    });
+    res = await axios.get(
+      `${canonicalUrl}&hl=en&gl=${encodeURIComponent(String(gl).toUpperCase())}`,
+      {
+        timeout: REQUEST_TIMEOUT_MS,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (compatible; CampaignAppLookup/1.0; +https://mraket.io)",
+        },
+      }
+    );
   } catch (e) {
-    // 404 => app does not exist for this package name.
+    // 404 => not available on this storefront.
     if (e.response && e.response.status === 404) return null;
     throw e;
   }
@@ -135,6 +139,7 @@ const lookupAndroid = async (bundleId) => {
   return {
     platform: PLATFORM.ANDROID,
     store: "play_store",
+    country: gl,
     bundleId,
     appId: bundleId,
     title,
@@ -148,6 +153,21 @@ const lookupAndroid = async (bundleId) => {
     version: null,
     description,
   };
+};
+
+// Google Play has no public lookup API; read the store page's metadata tags.
+// The listing is storefront-specific (region-locked apps 404 elsewhere), so use
+// the given country, otherwise sweep the busiest storefronts (incl. "in").
+const lookupAndroid = async (bundleId, country) => {
+  const countries = isUndefinedOrNull(country)
+    ? DEFAULT_COUNTRY_SWEEP
+    : [country];
+  for (const c of countries) {
+    // eslint-disable-next-line no-await-in-loop
+    const r = await lookupAndroidInCountry(bundleId, c).catch(() => null);
+    if (r) return r;
+  }
+  return null;
 };
 
 /**
@@ -171,7 +191,7 @@ const lookupApp = async ({ bundleId, platform, country } = {}) => {
   }
 
   if (platform === PLATFORM.ANDROID) {
-    const r = await lookupAndroid(id);
+    const r = await lookupAndroid(id, country);
     if (!r)
       throw new Error("App not found on the Play Store for bundleId " + id);
     return r;
@@ -186,7 +206,7 @@ const lookupApp = async ({ bundleId, platform, country } = {}) => {
     throw new Error("App not found on the App Store for id " + id);
   }
 
-  const android = await lookupAndroid(id).catch(() => null);
+  const android = await lookupAndroid(id, country).catch(() => null);
   if (android) return android;
 
   throw new Error(
