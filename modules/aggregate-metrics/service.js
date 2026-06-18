@@ -143,6 +143,11 @@ const pctChange = (cur, prev) => {
   return round2(((cur - prev) / prev) * 100);
 };
 
+// Cost Per Install = spend / installs. Returns null (not Infinity/NaN) when
+// there are no installs, so the UI can render it as "—".
+const costPerInstall = (spent, installs) =>
+  installs > 0 ? round2(spent / installs) : null;
+
 // Roll up all dashboard metrics for one period in a single pass.
 const aggregateTotals = async ({ orgId, campaignId, start, end }) => {
   const res = await aggregateMetricsModel.aggregate([
@@ -222,6 +227,14 @@ const aggregateMetricsService = {
         install: { value: cur.install, changePct: pctChange(cur.install, prev.install) },
         click: { value: cur.click, changePct: pctChange(cur.click, prev.click) },
         events: { value: cur.events, changePct: pctChange(cur.events, prev.events) },
+        // Cost Per Install = spend / installs (null until install data exists).
+        cpi: {
+          value: costPerInstall(cur.spent, cur.install),
+          changePct: pctChange(
+            costPerInstall(cur.spent, cur.install) || 0,
+            costPerInstall(prev.spent, prev.install) || 0
+          ),
+        },
         reEngagements: { active: reActive, total: reTotal },
         campaigns: { active: campActive, total: campTotal },
       },
@@ -299,6 +312,20 @@ const aggregateMetricsService = {
           spent: { $sum: spentExpr },
         },
       },
+      // Compute CPI BEFORE sort/limit so `sortBy: "cpi"` works. Null when there
+      // are no installs; in a descending sort MongoDB places nulls last, so
+      // campaigns without installs naturally sink to the bottom.
+      {
+        $addFields: {
+          cpi: {
+            $cond: [
+              { $gt: ["$install", 0] },
+              { $divide: ["$spent", "$install"] },
+              null,
+            ],
+          },
+        },
+      },
       { $sort: { [sortBy]: -1 } },
       { $limit: limit },
       {
@@ -324,6 +351,11 @@ const aggregateMetricsService = {
           install: 1,
           events: 1,
           spent: { $round: ["$spent", 2] },
+          // CPI was computed (unrounded) in $addFields above; round for display.
+          // Stays null when there are no installs → UI renders "—".
+          cpi: {
+            $cond: [{ $ne: ["$cpi", null] }, { $round: ["$cpi", 2] }, null],
+          },
         },
       },
     ]);
@@ -350,6 +382,7 @@ const aggregateMetricsService = {
           install: 0,
           events: 0,
           spent: 0,
+          cpi: null, // no spend/installs in range → undefined CPI
         });
       });
     }
