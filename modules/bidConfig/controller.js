@@ -28,6 +28,12 @@ const bidConfigController = {
     });
     return r;
   },
+
+  setCampaignEnableBidding: async (req, res) => {
+    const data = validateInfo(validate.setCampaignEnableBidding, req.body);
+    const r = await bidConfigService.setCampaignEnableBidding(data);
+    return r;
+  },
 };
 
 module.exports = bidConfigController;

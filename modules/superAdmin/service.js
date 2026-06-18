@@ -7,7 +7,7 @@ const superAdminService = {
   getAllCampaigns: async () => {
     const campaigns = await campaignModel
       .find({ status: { $ne: CAMPAIGN_STATUS.DELETED } })
-      .select({ title: 1, orgId: 1, status: 1, type: 1, appOs: 1, eventDetails: 1 })
+      .select({ title: 1, orgId: 1, status: 1, type: 1, appOs: 1, eventDetails: 1, enableBidding: 1 })
       .sort({ createdAt: -1 });
 
     const orgs = await orgModel.find({}).select({ name: 1 });
@@ -25,6 +25,7 @@ const superAdminService = {
         status: c.status,
         type: c.type,
         appOs: c.appOs,
+        enableBidding: !!c.enableBidding,
         eventBidPrice:
           (c.eventDetails && c.eventDetails[0] && c.eventDetails[0].bidPrice) || null,
       })),

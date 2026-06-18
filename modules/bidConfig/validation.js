@@ -31,8 +31,15 @@ const removeCampaign = Joi.object({
   campaignId: Joi.string().required(),
 });
 
+// Toggle a campaign's bidding eligibility (super admin only).
+const setCampaignEnableBidding = Joi.object({
+  campaignId: Joi.string().required(),
+  enableBidding: Joi.boolean().required(),
+});
+
 module.exports = {
   upsert,
   upsertCampaign,
   removeCampaign,
+  setCampaignEnableBidding,
 };

@@ -57,6 +57,10 @@ var campaignSchema = new mongoose.Schema(
 
     status: String,
 
+    // Whether this campaign is eligible to bid in the engine.
+    // Managed exclusively by super admin via the bid-config module.
+    enableBidding: { type: Boolean, default: false },
+
     currency: String,
     bundleId: String,
     appOs: String,

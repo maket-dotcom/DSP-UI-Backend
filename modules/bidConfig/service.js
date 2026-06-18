@@ -94,6 +94,26 @@ const upsertCampaign = async ({ data, reqBy }) => {
   return { message: "Campaign bid saved successfully", config };
 };
 
+// Toggle a campaign's bidding eligibility. The flag lives on the campaign
+// document itself and is managed only here (super admin / bid config).
+const setCampaignEnableBidding = async ({ campaignId, enableBidding }) => {
+  await assertCampaignExists(campaignId);
+
+  const campaign = await campaignModel.findOneAndUpdate(
+    { _id: campaignId },
+    { $set: { enableBidding } },
+    { new: true }
+  );
+
+  return {
+    message: `Bidding ${enableBidding ? "enabled" : "disabled"} for campaign`,
+    data: {
+      campaignId: String(campaign._id),
+      enableBidding: campaign.enableBidding,
+    },
+  };
+};
+
 // Remove a single campaign bid entry.
 const removeCampaign = async ({ campaignId, reqBy }) => {
   const config = await bidConfigModel.findOneAndUpdate(
@@ -114,4 +134,5 @@ module.exports = {
   upsert,
   upsertCampaign,
   removeCampaign,
+  setCampaignEnableBidding,
 };

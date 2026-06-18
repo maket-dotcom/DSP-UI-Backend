@@ -118,4 +118,31 @@ router.post("/campaign/upsert", execute(bidConfigController.upsertCampaign));
  */
 router.post("/campaign/remove", execute(bidConfigController.removeCampaign));
 
+/**
+ * @swagger
+ * /api/v1/bid-config/campaign/enable-bidding:
+ *   post:
+ *     summary: Enable or disable bidding for a single campaign
+ *     tags: [BidConfig]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [campaignId, enableBidding]
+ *             properties:
+ *               campaignId: { type: string }
+ *               enableBidding: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Campaign bidding flag updated successfully
+ */
+router.post(
+  "/campaign/enable-bidding",
+  execute(bidConfigController.setCampaignEnableBidding)
+);
+
 module.exports = router;
