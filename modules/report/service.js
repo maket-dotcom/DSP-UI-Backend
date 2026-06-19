@@ -1,8 +1,11 @@
 const moment = require("moment-timezone");
-const reportModel = require("./model");
+// Report is driven by the SAME collection as the Dashboard (single source of
+// truth) — the rolled-up daily aggregate, NOT a per-event collection. This keeps
+// Report and Dashboard numbers identical and scales to real traffic volumes.
+const aggregateMetricsModel = require("../aggregate-metrics/model");
 const campaignModel = require("../campaign/model");
 const { isUndefinedOrNull } = require("../../utils/validators");
-const { EVENT_NAME, DIMENSION, DATE_PRESET } = require("./constant");
+const { EVENT_NAME, CORE_EVENTS, DIMENSION, DATE_PRESET } = require("./constant");
 require("dotenv").config();
 
 /* ------------------------------- helpers ------------------------------- */
@@ -10,8 +13,10 @@ require("dotenv").config();
 const round2 = (n) => Math.round(((n || 0) + Number.EPSILON) * 100) / 100;
 const isObjectId = (v) => typeof v === "string" && /^[a-fA-F0-9]{24}$/.test(v);
 
-// Resolve the requested period into absolute UTC instants (start..end) plus the
-// display strings, honouring the caller's timezone.
+// Resolve the requested period into calendar-day strings (YYYY-MM-DD) used to
+// match the aggregate `date` field. The timezone only affects which calendar
+// days a relative preset resolves to; the aggregate buckets events by UTC day,
+// so day boundaries are UTC-accurate (a known limitation of pre-aggregated data).
 const resolveRange = (data = {}) => {
   const tz = data.timezone || "UTC";
   const { preset, startDate, endDate } = data;
@@ -61,15 +66,14 @@ const resolveRange = (data = {}) => {
 
   return {
     tz,
-    startInstant: start.toDate(),
-    endInstant: end.toDate(),
     startDate: start.format("YYYY-MM-DD"),
     endDate: end.format("YYYY-MM-DD"),
   };
 };
 
-// Map a group-by dimension to its aggregation expression.
-const dimensionExpr = (dim, tz) => {
+// Map a group-by dimension to its aggregation expression. date/month derive from
+// the stored `date` string (no $dateToString / timezone needed).
+const dimensionExpr = (dim) => {
   switch (dim) {
     case DIMENSION.CAMPAIGN:
       return "$campaignId";
@@ -77,67 +81,100 @@ const dimensionExpr = (dim, tz) => {
       return "$pubId";
     case DIMENSION.COUNTRY:
       return "$country";
-    case DIMENSION.REGION:
-      return "$region";
-    case DIMENSION.CITY:
-      return "$city";
     case DIMENSION.DATE:
-      return { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: tz } };
+      return "$date"; // already YYYY-MM-DD
     case DIMENSION.MONTH:
-      return { $dateToString: { format: "%Y-%m", date: "$createdAt", timezone: tz } };
-    case DIMENSION.HOUR:
-      return { $dateToString: { format: "%H", date: "$createdAt", timezone: tz } };
+      return { $substrBytes: ["$date", 0, 7] }; // YYYY-MM
     default:
       return "$campaignId";
   }
 };
 
+/* --------------------------- aggregation atoms -------------------------- */
+
+// bidCount/ecpm are stored as strings; convert safely (bad/empty -> 0).
+const numBid = {
+  $convert: { input: "$bidCount", to: "double", onError: 0, onNull: 0 },
+};
+const numEcpm = {
+  $convert: { input: "$ecpm", to: "double", onError: 0, onNull: 0 },
+};
+// Each aggregate row carries a COUNT in bidCount, so a metric is the SUM of
+// bidCount over its event rows (not a count of documents).
 const countIf = (eventName) => ({
-  $cond: [{ $eq: ["$eventName", eventName] }, 1, 0],
+  $cond: [{ $eq: ["$eventName", eventName] }, numBid, 0],
 });
-const numPrice = {
-  $convert: { input: "$price", to: "double", onError: 0, onNull: 0 },
-};
-
-const metricAccumulators = {
-  clicks: { $sum: countIf(EVENT_NAME.CLICK) },
-  installs: { $sum: countIf(EVENT_NAME.INSTALL) },
-  impressions: { $sum: countIf(EVENT_NAME.IMPRESSION) },
-  spent: { $sum: numPrice },
-};
-
-// clicks / impressions * 100 (guard divide-by-zero).
-const ctrExpr = {
+// Spend is impression-only (CPM): impressions × ecpm / 1000. click/install/event
+// rows never contribute, regardless of their ecpm.
+const spentExpr = {
   $cond: [
-    { $gt: ["$impressions", 0] },
-    { $multiply: [{ $divide: ["$clicks", "$impressions"] }, 100] },
+    { $eq: ["$eventName", EVENT_NAME.IMPRESSION] },
+    { $divide: [{ $multiply: [numBid, numEcpm] }, 1000] },
     0,
   ],
 };
+// Custom in-app events = anything not in the core funnel.
+const eventsExpr = { $cond: [{ $in: ["$eventName", CORE_EVENTS] }, 0, numBid] };
 
-const withCtr = (doc) => ({
-  clicks: doc.clicks || 0,
-  installs: doc.installs || 0,
-  impressions: doc.impressions || 0,
-  spent: round2(doc.spent),
-  ctr: round2(doc.impressions > 0 ? (doc.clicks / doc.impressions) * 100 : 0),
-});
+const metricAccumulators = {
+  impressions: { $sum: countIf(EVENT_NAME.IMPRESSION) },
+  clicks: { $sum: countIf(EVENT_NAME.CLICK) },
+  installs: { $sum: countIf(EVENT_NAME.INSTALL) },
+  events: { $sum: eventsExpr },
+  spent: { $sum: spentExpr },
+};
+
+// Derived columns, added BEFORE $sort so they're sortable. ctr defaults to 0;
+// cpi/cpc are null (rendered "—") when their denominator is 0.
+const derivedFields = {
+  ctr: {
+    $cond: [
+      { $gt: ["$impressions", 0] },
+      { $multiply: [{ $divide: ["$clicks", "$impressions"] }, 100] },
+      0,
+    ],
+  },
+  cpi: {
+    $cond: [{ $gt: ["$installs", 0] }, { $divide: ["$spent", "$installs"] }, null],
+  },
+  cpc: {
+    $cond: [{ $gt: ["$clicks", 0] }, { $divide: ["$spent", "$clicks"] }, null],
+  },
+};
+
+// Final shaping: round metrics for display (cpi/cpc stay null).
+const shapeMetrics = (doc = {}) => {
+  const spent = round2(doc.spent);
+  const clicks = doc.clicks || 0;
+  const installs = doc.installs || 0;
+  const impressions = doc.impressions || 0;
+  return {
+    impressions,
+    clicks,
+    installs,
+    events: doc.events || 0,
+    spent,
+    ctr: round2(impressions > 0 ? (clicks / impressions) * 100 : 0),
+    cpi: installs > 0 ? round2(spent / installs) : null,
+    cpc: clicks > 0 ? round2(spent / clicks) : null,
+  };
+};
 
 /* ------------------------------- service ------------------------------- */
 
 const reportService = {
   // Statistics report: metrics rolled up by one or more dimensions, with a
-  // grand-total row and pagination over the grouped rows.
+  // grand-total row and pagination over the grouped rows. Reads the rolled-up
+  // daily aggregate (same data as the Dashboard).
   getReport: async ({ data, reqBy }) => {
     const orgId = reqBy.org_id;
     const range = resolveRange(data);
     const { groupBy, columns, sortBy, sortOrder, page, limit } = data;
-    const tz = range.tz;
 
     // ---- match stage (org + date range + optional campaign filter + search) ----
     const match = {
       orgId,
-      createdAt: { $gte: range.startInstant, $lte: range.endInstant },
+      date: { $gte: range.startDate, $lte: range.endDate },
     };
     if (!isUndefinedOrNull(data.campaignIds) && data.campaignIds.length) {
       match.campaignId = { $in: data.campaignIds };
@@ -146,42 +183,31 @@ const reportService = {
     }
     if (!isUndefinedOrNull(data.search) && data.search !== "") {
       const rx = new RegExp(data.search, "i");
-      match.$or = [
-        { campaignId: rx },
-        { pubId: rx },
-        { country: rx },
-        { region: rx },
-        { city: rx },
-      ];
+      match.$or = [{ campaignId: rx }, { pubId: rx }, { country: rx }];
     }
 
     // ---- group _id from selected dimensions ----
     const groupId = {};
     groupBy.forEach((d) => {
-      groupId[d] = dimensionExpr(d, tz);
+      groupId[d] = dimensionExpr(d);
     });
 
     const skip = (page - 1) * limit;
     const sortDir = sortOrder === "asc" ? 1 : -1;
 
-    const [result] = await reportModel.aggregate([
+    const [result] = await aggregateMetricsModel.aggregate([
       { $match: match },
       {
         $facet: {
           rows: [
             { $group: { _id: groupId, ...metricAccumulators } },
-            { $addFields: { ctr: ctrExpr } },
+            { $addFields: derivedFields },
             { $sort: { [sortBy]: sortDir, _id: 1 } },
             { $skip: skip },
             { $limit: limit },
           ],
-          summary: [
-            { $group: { _id: null, ...metricAccumulators } },
-          ],
-          groupCount: [
-            { $group: { _id: groupId } },
-            { $count: "count" },
-          ],
+          summary: [{ $group: { _id: null, ...metricAccumulators } }],
+          groupCount: [{ $group: { _id: groupId } }, { $count: "count" }],
         },
       },
     ]);
@@ -193,8 +219,8 @@ const reportService = {
 
     // ---- shape rows: flatten dimensions to top level + rounded metrics ----
     const rows = rawRows.map((r) => ({
-      ...r._id, // campaign / publisher / country / ... values
-      ...withCtr(r),
+      ...r._id, // campaign / publisher / country / date / month values
+      ...shapeMetrics(r),
     }));
 
     // ---- enrich with campaign title/status when grouped by campaign ----
@@ -218,7 +244,7 @@ const reportService = {
       }
     }
 
-    const totals = withCtr(summaryDoc);
+    const totals = shapeMetrics(summaryDoc);
 
     return {
       groupBy,
@@ -228,7 +254,7 @@ const reportService = {
         preset: data.preset || null,
         startDate: range.startDate,
         endDate: range.endDate,
-        timezone: tz,
+        timezone: range.tz,
       },
       totals,
       data: rows,

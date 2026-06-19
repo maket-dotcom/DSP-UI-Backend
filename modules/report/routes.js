@@ -35,23 +35,23 @@ const { RESOURCES, ACTIONS } = require("../userConfig/constant");
  *             properties:
  *               groupBy:
  *                 type: array
- *                 items: { type: string, enum: [campaign, publisher, country, region, city, date, month, hour] }
- *                 description: One or more dimensions. Default ["campaign"].
+ *                 items: { type: string, enum: [campaign, publisher, country, date, month] }
+ *                 description: One or more dimensions. Default ["campaign"]. (Driven by the daily aggregate — region/city/hour are not available.)
  *               columns:
  *                 type: array
- *                 items: { type: string, enum: [clicks, installs, impressions, ctr, spent] }
- *                 description: Which metric columns to display. Default ["clicks","installs","ctr","spent"].
+ *                 items: { type: string, enum: [clicks, installs, impressions, events, ctr, spent, cpi, cpc] }
+ *                 description: Which metric columns to display. Default ["impressions","clicks","installs","ctr","spent"].
  *               campaignId: { type: string, description: "Filter to a single campaign" }
  *               campaignIds:
  *                 type: array
  *                 items: { type: string }
  *                 description: Filter to multiple campaigns
- *               search: { type: string, description: "Regex search across campaignId/publisher/country/region/city" }
+ *               search: { type: string, description: "Regex search across campaignId/publisher/country" }
  *               preset: { type: string, enum: [today, yesterday, last_7_days, last_30_days, this_month, last_month] }
  *               startDate: { type: string, example: "2026-05-01", description: "Custom range start (with endDate)" }
  *               endDate: { type: string, example: "2026-05-31", description: "Custom range end (with startDate)" }
- *               timezone: { type: string, example: "Asia/Kolkata", description: "IANA tz for preset boundaries + date/month/hour grouping. Default UTC." }
- *               sortBy: { type: string, enum: [clicks, installs, impressions, ctr, spent], default: spent }
+ *               timezone: { type: string, example: "Asia/Kolkata", description: "IANA tz used to resolve relative presets into calendar days. Default UTC. (Aggregate buckets are UTC days.)" }
+ *               sortBy: { type: string, enum: [clicks, installs, impressions, events, ctr, spent, cpi, cpc], default: spent }
  *               sortOrder: { type: string, enum: [asc, desc], default: desc }
  *               page: { type: integer, default: 1 }
  *               limit: { type: integer, default: 20, maximum: 200 }
