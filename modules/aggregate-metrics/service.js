@@ -100,10 +100,17 @@ const enumerateDates = (startStr, endStr) => {
 const numBid = {
   $convert: { input: "$bidCount", to: "double", onError: 0, onNull: 0 },
 };
+// unitBidPrice is an eCPM — the price per 1000 impressions (OpenRTB bid.price /
+// ${AUCTION_PRICE} are CPMs). The bid engine logs the raw CPM into its event
+// CSVs, so the aggregator's unitBidPrice is a CPM too.
 const numPrice = {
   $convert: { input: "$unitBidPrice", to: "double", onError: 0, onNull: 0 },
 };
-const spentExpr = { $multiply: [numBid, numPrice] };
+// Spend = impressions × eCPM / 1000  (a CPM bills once per 1000 impressions).
+// Without the /1000 the dashboard over-reports spend by 1000×.
+const spentExpr = {
+  $divide: [{ $multiply: [numBid, numPrice] }, 1000],
+};
 const countIf = (eventName) => ({
   $cond: [{ $eq: ["$eventName", eventName] }, numBid, 0],
 });
