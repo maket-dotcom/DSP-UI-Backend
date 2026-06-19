@@ -144,7 +144,7 @@ router.get(
  *         schema: { type: string, example: "2026-05-31" }
  *       - in: query
  *         name: sortBy
- *         schema: { type: string, enum: [click, install, events, spent, cpi], default: spent }
+ *         schema: { type: string, enum: [click, install, events, spent, cpi, cpc], default: spent }
  *       - in: query
  *         name: limit
  *         schema: { type: integer, default: 10, minimum: 1, maximum: 50 }

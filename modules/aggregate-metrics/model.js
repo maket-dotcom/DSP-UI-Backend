@@ -10,8 +10,9 @@ var aggregateMetricsSchema = new mongoose.Schema(
         creativeId: String, // which creative served (from the bid-engine CSVs)
         pubId: String, // publisher zone
         country: String, // geo (request device country)
+        ecpm: String,
         bidCount: String,
-        unitBidPrice: String,
+        //unitBidPrice: String,
         eventName: String,
         date: String, // YYYY-MM-DD (date-wise aggregation key)
         source: String, // who produced the row, e.g. "engine" (bid-engine roll-up) or "mmp"

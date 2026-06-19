@@ -96,20 +96,28 @@ const enumerateDates = (startStr, endStr) => {
 
 /* --------------------------- aggregation atoms -------------------------- */
 
-// bidCount/unitBidPrice are stored as strings; convert safely (bad/empty -> 0).
+// bidCount/ecpm are stored as strings; convert safely (bad/empty -> 0).
 const numBid = {
   $convert: { input: "$bidCount", to: "double", onError: 0, onNull: 0 },
 };
-// unitBidPrice is an eCPM — the price per 1000 impressions (OpenRTB bid.price /
+// ecpm is the average eCPM — the price per 1000 impressions (OpenRTB bid.price /
 // ${AUCTION_PRICE} are CPMs). The bid engine logs the raw CPM into its event
-// CSVs, so the aggregator's unitBidPrice is a CPM too.
+// CSVs, so the aggregator's ecpm is a CPM too.
 const numPrice = {
-  $convert: { input: "$unitBidPrice", to: "double", onError: 0, onNull: 0 },
+  $convert: { input: "$ecpm", to: "double", onError: 0, onNull: 0 },
 };
-// Spend = impressions × eCPM / 1000  (a CPM bills once per 1000 impressions).
-// Without the /1000 the dashboard over-reports spend by 1000×.
+// Spend is charged ONLY on impressions — CPM (cost per mille) is the sole
+// billing model in programmatic. Spend = impressions × eCPM / 1000 (a CPM bills
+// once per 1000 impressions; without the /1000 spend is 1000× too high).
+// Guarding on eventName means click/install rows never contribute to spend,
+// regardless of what ecpm they happen to carry. CPI/CPC are then derived as
+// spend / installs and spend / clicks.
 const spentExpr = {
-  $divide: [{ $multiply: [numBid, numPrice] }, 1000],
+  $cond: [
+    { $eq: ["$eventName", EVENT_NAME.IMPRESSION] },
+    { $divide: [{ $multiply: [numBid, numPrice] }, 1000] },
+    0,
+  ],
 };
 const countIf = (eventName) => ({
   $cond: [{ $eq: ["$eventName", eventName] }, numBid, 0],
@@ -154,6 +162,10 @@ const pctChange = (cur, prev) => {
 // there are no installs, so the UI can render it as "—".
 const costPerInstall = (spent, installs) =>
   installs > 0 ? round2(spent / installs) : null;
+
+// Cost Per Click = spend / clicks. Null when there are no clicks (→ "—").
+const costPerClick = (spent, clicks) =>
+  clicks > 0 ? round2(spent / clicks) : null;
 
 // Roll up all dashboard metrics for one period in a single pass.
 const aggregateTotals = async ({ orgId, campaignId, start, end }) => {
@@ -242,6 +254,14 @@ const aggregateMetricsService = {
             costPerInstall(prev.spent, prev.install) || 0
           ),
         },
+        // Cost Per Click = spend / clicks (null until clicks exist).
+        cpc: {
+          value: costPerClick(cur.spent, cur.click),
+          changePct: pctChange(
+            costPerClick(cur.spent, cur.click) || 0,
+            costPerClick(prev.spent, prev.click) || 0
+          ),
+        },
         reEngagements: { active: reActive, total: reTotal },
         campaigns: { active: campActive, total: campTotal },
       },
@@ -319,15 +339,22 @@ const aggregateMetricsService = {
           spent: { $sum: spentExpr },
         },
       },
-      // Compute CPI BEFORE sort/limit so `sortBy: "cpi"` works. Null when there
-      // are no installs; in a descending sort MongoDB places nulls last, so
-      // campaigns without installs naturally sink to the bottom.
+      // Compute CPI/CPC BEFORE sort/limit so `sortBy: "cpi"|"cpc"` works. Null
+      // when there are no installs/clicks; in a descending sort MongoDB places
+      // nulls last, so campaigns without installs/clicks sink to the bottom.
       {
         $addFields: {
           cpi: {
             $cond: [
               { $gt: ["$install", 0] },
               { $divide: ["$spent", "$install"] },
+              null,
+            ],
+          },
+          cpc: {
+            $cond: [
+              { $gt: ["$click", 0] },
+              { $divide: ["$spent", "$click"] },
               null,
             ],
           },
@@ -358,10 +385,13 @@ const aggregateMetricsService = {
           install: 1,
           events: 1,
           spent: { $round: ["$spent", 2] },
-          // CPI was computed (unrounded) in $addFields above; round for display.
-          // Stays null when there are no installs → UI renders "—".
+          // CPI/CPC computed (unrounded) in $addFields above; round for display.
+          // Stay null when there are no installs/clicks → UI renders "—".
           cpi: {
             $cond: [{ $ne: ["$cpi", null] }, { $round: ["$cpi", 2] }, null],
+          },
+          cpc: {
+            $cond: [{ $ne: ["$cpc", null] }, { $round: ["$cpc", 2] }, null],
           },
         },
       },
@@ -390,6 +420,7 @@ const aggregateMetricsService = {
           events: 0,
           spent: 0,
           cpi: null, // no spend/installs in range → undefined CPI
+          cpc: null, // no spend/clicks in range → undefined CPC
         });
       });
     }

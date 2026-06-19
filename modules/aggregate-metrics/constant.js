@@ -22,7 +22,7 @@ module.exports = {
   },
 
   // Metrics usable as the sort key for the Top Campaigns table.
-  TOP_SORTABLE: ["click", "install", "events", "spent", "cpi"],
+  TOP_SORTABLE: ["click", "install", "events", "spent", "cpi", "cpc"],
 
   // Supported relative date-range presets.
   DATE_PRESET: {
