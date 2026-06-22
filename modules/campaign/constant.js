@@ -56,6 +56,7 @@ module.exports = {
     goal: "Goal",
     budget: "Budget",
     dailyBudget: "Daily Budget",
+    geo: "Geo",
   }
 
 };
