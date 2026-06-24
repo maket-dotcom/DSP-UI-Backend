@@ -29,11 +29,12 @@ const mediaService = {
     const fileName = `${uuidv4()}_${sanitizeFileName(file.originalname)}`;
     const destinationPath = `${folder}/${fileName}`;
 
-    const uploaded = await gcs.uploadBuffer({
+    // Bucket is public (uniform bucket-level access), so store a permanent public
+    // URL that never expires — not a signed/expiring one.
+    const uploaded = await gcs.uploadPublicBuffer({
       buffer: file.buffer,
       destinationPath,
       contentType: file.mimetype,
-      makePublic: true,
     });
 
     const media = new mediaModel({

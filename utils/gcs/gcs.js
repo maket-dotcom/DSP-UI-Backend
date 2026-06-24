@@ -126,6 +126,66 @@ const uploadBuffer = async ({
 };
 
 /**
+ * Build the permanent public URL for an object. Valid only when the bucket is
+ * publicly readable (e.g. uniform bucket-level access with `allUsers` granted
+ * Storage Object Viewer). This URL NEVER expires.
+ *
+ * @param {string} destinationPath - The full path inside the bucket
+ * @returns {string} Public URL, e.g. https://storage.googleapis.com/<bucket>/<path>
+ */
+const getPublicUrl = (destinationPath) => {
+  // Encode each path segment (preserve the "/" separators) so names with spaces
+  // or reserved characters resolve correctly.
+  const encoded = String(destinationPath)
+    .split("/")
+    .map(encodeURIComponent)
+    .join("/");
+  return `https://storage.googleapis.com/${GCS_BUCKET_NAME}/${encoded}`;
+};
+
+/**
+ * Upload an in-memory buffer and return its PERMANENT public URL.
+ *
+ * Use this when the bucket is already public (uniform bucket-level access) and
+ * you want to persist a non-expiring link in the database. Unlike uploadBuffer,
+ * this does NOT call makePublic() (which fails under uniform bucket-level access)
+ * and does NOT generate a signed/expiring URL — it just returns the static
+ * public URL for the object.
+ *
+ * @param {Buffer} buffer - The file contents
+ * @param {string} destinationPath - The full path inside the bucket (folder + fileName)
+ * @param {string} contentType - MIME type of the file (e.g. "image/png")
+ * @returns {Object} { url, gcsPath, bucket }
+ */
+const uploadPublicBuffer = async ({ buffer, destinationPath, contentType }) => {
+  try {
+    const file = bucket.file(destinationPath);
+
+    await file.save(buffer, {
+      resumable: false,
+      metadata: {
+        contentType: contentType || "application/octet-stream",
+        // Objects live at a unique (uuid) path and are never overwritten, so they
+        // can be cached aggressively by browsers/CDNs.
+        cacheControl: "public, max-age=31536000, immutable",
+      },
+    });
+
+    const url = getPublicUrl(destinationPath);
+    console.log(`[GCS] Public object uploaded: ${destinationPath}`);
+
+    return {
+      url,
+      gcsPath: destinationPath,
+      bucket: GCS_BUCKET_NAME,
+    };
+  } catch (error) {
+    console.error("[GCS] Error uploading public object:", error.message);
+    throw new Error(`GCS public upload failed: ${error.message}`);
+  }
+};
+
+/**
  * Download a remote file (by URL) and upload it into the bucket.
  *
  * @param {string} url - The remote file URL to download
@@ -222,9 +282,11 @@ const deleteLocalFile = (filePath) => {
 module.exports = {
   uploadFile,
   uploadBuffer,
+  uploadPublicBuffer,
   uploadFromUrl,
   deleteFile,
   getSignedUrl,
+  getPublicUrl,
   fileExists,
   storage,
   bucket,
