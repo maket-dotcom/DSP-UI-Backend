@@ -191,9 +191,17 @@ const uploadPublicBuffer = async ({ buffer, destinationPath, contentType }) => {
  * @param {string} url - The remote file URL to download
  * @param {string} destinationPath - The full path inside the bucket (folder + fileName)
  * @param {boolean} makePublic - Whether to expose a public URL (default: true)
+ * @param {boolean} publicUrl - When true, store a PERMANENT public URL (no signing,
+ *                              no makePublic) via uploadPublicBuffer. Use this for
+ *                              links persisted in the DB so they never expire.
  * @returns {Object} { url, gcsPath, bucket, contentType }
  */
-const uploadFromUrl = async ({ url, destinationPath, makePublic = true }) => {
+const uploadFromUrl = async ({
+  url,
+  destinationPath,
+  makePublic = true,
+  publicUrl = false,
+}) => {
   let response;
   try {
     response = await axios.get(url, {
@@ -211,12 +219,9 @@ const uploadFromUrl = async ({ url, destinationPath, makePublic = true }) => {
   const contentType =
     response.headers["content-type"] || "application/octet-stream";
 
-  const result = await uploadBuffer({
-    buffer,
-    destinationPath,
-    contentType,
-    makePublic,
-  });
+  const result = publicUrl
+    ? await uploadPublicBuffer({ buffer, destinationPath, contentType })
+    : await uploadBuffer({ buffer, destinationPath, contentType, makePublic });
   return { ...result, contentType };
 };
 

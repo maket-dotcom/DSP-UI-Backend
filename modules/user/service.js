@@ -359,11 +359,12 @@ const userService = {
     const fileName = `${uuidv4()}_${String(file.originalname).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
     const destinationPath = `${folder}/${fileName}`;
 
-    const uploaded = await gcs.uploadBuffer({
+    // Store a permanent public URL in the DB (never expires) instead of a
+    // signed/expiring URL.
+    const uploaded = await gcs.uploadPublicBuffer({
       buffer: file.buffer,
       destinationPath,
       contentType: file.mimetype,
-      makePublic: true,
     });
 
     const profilePic = uploaded.url;
