@@ -23,6 +23,13 @@ const superAdminController = {
     const r = await superAdminService.getAllCampaigns();
     return r;
   },
+
+  // Live bid-engine counters (proxied from the engine's /counts), polled by the
+  // super-admin dashboard for a real-time view.
+  engineCounts: async (req, res) => {
+    const r = await superAdminService.getEngineCounts();
+    return r;
+  },
 };
 
 module.exports = superAdminController;

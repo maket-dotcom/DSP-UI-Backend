@@ -1,8 +1,43 @@
+const axios = require("axios");
 const campaignModel = require("../campaign/model");
 const orgModel = require("../organization/model");
 const { STATUS: CAMPAIGN_STATUS } = require("../campaign/constant");
 
+require("dotenv").config();
+
+// The DSP bid engine exposes live Redis-backed counters at GET /counts.
+// Override via env in case the tracking domain changes.
+const ENGINE_COUNTS_URL =
+  process.env.BID_ENGINE_COUNTS_URL || "http://track.adsshare.in/counts";
+
 const superAdminService = {
+  // Proxy the bid engine's real-time counters (total + today) for the
+  // super-admin live dashboard. Never throws: if the engine is unreachable the
+  // dashboard should keep working, so we return empty buckets + an `unavailable`
+  // flag instead of failing the request.
+  getEngineCounts: async () => {
+    try {
+      const { data } = await axios.get(ENGINE_COUNTS_URL, {
+        timeout: 5000,
+        headers: { accept: "application/json" },
+      });
+      return {
+        total: data?.total || {},
+        today: data?.today || {},
+        unavailable: false,
+        fetchedAt: new Date().toISOString(),
+      };
+    } catch (err) {
+      return {
+        total: {},
+        today: {},
+        unavailable: true,
+        error: err.message,
+        fetchedAt: new Date().toISOString(),
+      };
+    }
+  },
+
   // All campaigns across every org (for the bid-config campaign picker).
   getAllCampaigns: async () => {
     const campaigns = await campaignModel

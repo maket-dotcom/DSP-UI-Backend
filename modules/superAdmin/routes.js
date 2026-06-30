@@ -74,4 +74,20 @@ router.get("/orgs", execute(superAdminController.orgs));
  */
 router.get("/campaigns", execute(superAdminController.campaigns));
 
+/**
+ * @swagger
+ * /api/v1/super-admin/engine-counts:
+ *   get:
+ *     summary: Live bid-engine counters (proxied from the engine's /counts)
+ *     description: Real-time total + today counts (bid/nobid/win/bill/loss/click).
+ *       Polled by the super-admin dashboard. Returns `unavailable:true` (with empty
+ *       buckets) if the engine is unreachable, so the dashboard never errors.
+ *     tags: [SuperAdmin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200: { description: "{ total, today, unavailable, fetchedAt }" }
+ */
+router.get("/engine-counts", execute(superAdminController.engineCounts));
+
 module.exports = router;
