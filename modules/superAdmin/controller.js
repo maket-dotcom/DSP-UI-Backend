@@ -1,4 +1,6 @@
 const aggregateMetricsService = require("../aggregate-metrics/service");
+const reportService = require("../report/service");
+const reportValidate = require("../report/validation");
 const superAdminService = require("./service");
 const validate = require("./validation");
 const { validateInfo } = require("../../middleware/index");
@@ -28,6 +30,14 @@ const superAdminController = {
   // super-admin dashboard for a real-time view.
   engineCounts: async (req, res) => {
     const r = await superAdminService.getEngineCounts();
+    return r;
+  },
+
+  // Cross-org aggregate report (group by org / campaign / bundle / country / …
+  // with all metrics). Reuses the report service's super-admin variant.
+  report: async (req, res) => {
+    const data = validateInfo(reportValidate.getSuperReport, req.body);
+    const r = await reportService.getSuperReport({ data });
     return r;
   },
 };

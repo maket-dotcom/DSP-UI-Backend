@@ -1,5 +1,5 @@
 const Joi = require("joi");
-const { DIMENSION, METRIC, DATE_PRESET, DEFAULT_COLUMNS } = require("./constant");
+const { DIMENSION, SUPER_DIMENSION, METRIC, DATE_PRESET, DEFAULT_COLUMNS } = require("./constant");
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -46,6 +46,44 @@ const getReport = Joi.object({
   limit: Joi.number().integer().min(1).max(200).default(20),
 });
 
+// Super-admin (cross-org) report. Adds the `org` dimension and an optional
+// orgId / bundle filter; defaults to grouping by organisation.
+const getSuperReport = Joi.object({
+  groupBy: Joi.array()
+    .items(Joi.string().valid(...Object.values(SUPER_DIMENSION)))
+    .min(1)
+    .unique()
+    .default([SUPER_DIMENSION.ORG]),
+
+  columns: Joi.array()
+    .items(Joi.string().valid(...Object.values(METRIC)))
+    .min(1)
+    .unique()
+    .default(DEFAULT_COLUMNS),
+
+  // Optional filters (all cross-org unless narrowed).
+  orgId: Joi.string().trim().optional(),
+  campaignId: Joi.string().trim().optional(),
+  campaignIds: Joi.array().items(Joi.string().trim()).optional(),
+  bundle: Joi.string().trim().optional(),
+  search: Joi.string().trim().optional(),
+
+  preset: Joi.string().valid(...Object.values(DATE_PRESET)).optional(),
+  startDate: Joi.string().pattern(dateRegex).optional().messages({
+    "string.pattern.base": "startDate must be in YYYY-MM-DD format.",
+  }),
+  endDate: Joi.string().pattern(dateRegex).optional().messages({
+    "string.pattern.base": "endDate must be in YYYY-MM-DD format.",
+  }),
+  timezone: Joi.string().trim().default("UTC"),
+
+  sortBy: Joi.string().valid(...Object.values(METRIC)).default(METRIC.SPENT),
+  sortOrder: Joi.string().valid("asc", "desc").default("desc"),
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(200).default(20),
+});
+
 module.exports = {
   getReport,
+  getSuperReport,
 };

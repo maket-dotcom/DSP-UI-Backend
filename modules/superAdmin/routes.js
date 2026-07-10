@@ -90,4 +90,21 @@ router.get("/campaigns", execute(superAdminController.campaigns));
  */
 router.get("/engine-counts", execute(superAdminController.engineCounts));
 
+/**
+ * @swagger
+ * /api/v1/super-admin/report:
+ *   post:
+ *     summary: Cross-org aggregate report (group by org/campaign/bundle/country/date/month)
+ *     description: All-orgs statistics from the daily aggregate. Group by one or more
+ *       of [org, campaign, publisher, country, bundle, date, month]; metrics
+ *       [impressions, clicks, installs, events, ctr, spent, cpi, cpc]. Optional
+ *       orgId / campaignIds / bundle filters. Org name + campaign title are joined.
+ *     tags: [SuperAdmin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200: { description: "{ groupBy, columns, totals, data, pagination }" }
+ */
+router.post("/report", execute(superAdminController.report));
+
 module.exports = router;

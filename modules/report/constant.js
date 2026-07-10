@@ -21,6 +21,19 @@ module.exports = {
     CAMPAIGN: "campaign",
     PUBLISHER: "publisher",
     COUNTRY: "country",
+    BUNDLE: "bundle", // app.bundle (app) / site.domain (web) — the supply source
+    DATE: "date",
+    MONTH: "month",
+  },
+
+  // Super-admin (cross-org) report also allows grouping by organisation. Kept
+  // separate so the org-scoped report can't group by "org" (meaningless there).
+  SUPER_DIMENSION: {
+    ORG: "org",
+    CAMPAIGN: "campaign",
+    PUBLISHER: "publisher",
+    COUNTRY: "country",
+    BUNDLE: "bundle",
     DATE: "date",
     MONTH: "month",
   },

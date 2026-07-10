@@ -4,8 +4,9 @@ const moment = require("moment-timezone");
 // Report and Dashboard numbers identical and scales to real traffic volumes.
 const aggregateMetricsModel = require("../aggregate-metrics/model");
 const campaignModel = require("../campaign/model");
+const orgModel = require("../organization/model");
 const { isUndefinedOrNull } = require("../../utils/validators");
-const { EVENT_NAME, CORE_EVENTS, DIMENSION, DATE_PRESET } = require("./constant");
+const { EVENT_NAME, CORE_EVENTS, DIMENSION, SUPER_DIMENSION, DATE_PRESET } = require("./constant");
 require("dotenv").config();
 
 /* ------------------------------- helpers ------------------------------- */
@@ -81,6 +82,10 @@ const dimensionExpr = (dim) => {
       return "$pubId";
     case DIMENSION.COUNTRY:
       return "$country";
+    case DIMENSION.BUNDLE:
+      return "$bundleId"; // supply app bundle / site domain
+    case SUPER_DIMENSION.ORG:
+      return "$orgId";
     case DIMENSION.DATE:
       return "$date"; // already YYYY-MM-DD
     case DIMENSION.MONTH:
@@ -160,20 +165,114 @@ const shapeMetrics = (doc = {}) => {
   };
 };
 
+// Shared aggregation: group the matched rows by the chosen dimensions, compute
+// metrics + derived columns, sort/paginate, and return shaped rows + totals +
+// the total group count. Used by BOTH the org-scoped and super-admin reports.
+const aggregateGrouped = async ({ match, groupBy, sortBy, sortOrder, page, limit }) => {
+  const groupId = {};
+  groupBy.forEach((d) => {
+    groupId[d] = dimensionExpr(d);
+  });
+
+  const skip = (page - 1) * limit;
+  const sortDir = sortOrder === "asc" ? 1 : -1;
+
+  const [result] = await aggregateMetricsModel.aggregate([
+    { $match: match },
+    {
+      $facet: {
+        rows: [
+          { $group: { _id: groupId, ...metricAccumulators } },
+          { $addFields: derivedFields },
+          { $sort: { [sortBy]: sortDir, _id: 1 } },
+          { $skip: skip },
+          { $limit: limit },
+        ],
+        summary: [{ $group: { _id: null, ...metricAccumulators } }],
+        groupCount: [{ $group: { _id: groupId } }, { $count: "count" }],
+      },
+    },
+  ]);
+
+  const rawRows = (result && result.rows) || [];
+  const summaryDoc = (result && result.summary && result.summary[0]) || {};
+  const totalGroups =
+    (result && result.groupCount && result.groupCount[0] && result.groupCount[0].count) || 0;
+
+  const rows = rawRows.map((r) => ({
+    ...r._id, // dimension values (campaign / bundle / org / country / date …)
+    ...shapeMetrics(r),
+  }));
+
+  return { rows, totals: shapeMetrics(summaryDoc), totalGroups };
+};
+
+// Add campaign title/status to rows grouped by campaign (campaignId → title).
+const enrichCampaignTitles = async (rows) => {
+  const ids = rows.map((r) => r[DIMENSION.CAMPAIGN]).filter(isObjectId);
+  if (!ids.length) return;
+  const camps = await campaignModel
+    .find({ _id: { $in: ids } })
+    .select({ title: 1, status: 1 });
+  const map = {};
+  camps.forEach((c) => {
+    map[String(c._id)] = { title: c.title, status: c.status };
+  });
+  rows.forEach((r) => {
+    const c = map[r[DIMENSION.CAMPAIGN]];
+    r.campaignTitle = c ? c.title : null;
+    r.campaignStatus = c ? c.status : null;
+  });
+};
+
+// Add organisation name/subdomain to rows grouped by org (orgId → name).
+const enrichOrgNames = async (rows) => {
+  const ids = rows.map((r) => r[SUPER_DIMENSION.ORG]).filter(isObjectId);
+  if (!ids.length) return;
+  const orgs = await orgModel
+    .find({ _id: { $in: ids } })
+    .select({ name: 1, subdomain: 1 });
+  const map = {};
+  orgs.forEach((o) => {
+    map[String(o._id)] = { name: o.name, subdomain: o.subdomain };
+  });
+  rows.forEach((r) => {
+    const o = map[r[SUPER_DIMENSION.ORG]];
+    r.orgName = o ? o.name : null;
+    r.orgSubdomain = o ? o.subdomain : null;
+  });
+};
+
+const buildResponse = (data, range, groupBy, columns, sortBy, sortOrder, page, limit, result) => ({
+  groupBy,
+  columns,
+  sort: { by: sortBy, order: sortOrder },
+  range: {
+    preset: data.preset || null,
+    startDate: range.startDate,
+    endDate: range.endDate,
+    timezone: range.tz,
+  },
+  totals: result.totals,
+  data: result.rows,
+  pagination: {
+    page,
+    limit,
+    total: result.totalGroups,
+    totalPages: Math.ceil(result.totalGroups / limit),
+  },
+});
+
 /* ------------------------------- service ------------------------------- */
 
 const reportService = {
-  // Statistics report: metrics rolled up by one or more dimensions, with a
-  // grand-total row and pagination over the grouped rows. Reads the rolled-up
-  // daily aggregate (same data as the Dashboard).
+  // Org-scoped statistics report (driven by the caller's token org).
   getReport: async ({ data, reqBy }) => {
-    const orgId = reqBy.org_id;
     const range = resolveRange(data);
     const { groupBy, columns, sortBy, sortOrder, page, limit } = data;
 
-    // ---- match stage (org + date range + optional campaign filter + search) ----
     const match = {
-      orgId,
+      orgId: reqBy.org_id,
       date: { $gte: range.startDate, $lte: range.endDate },
     };
     if (!isUndefinedOrNull(data.campaignIds) && data.campaignIds.length) {
@@ -183,88 +282,46 @@ const reportService = {
     }
     if (!isUndefinedOrNull(data.search) && data.search !== "") {
       const rx = new RegExp(data.search, "i");
-      match.$or = [{ campaignId: rx }, { pubId: rx }, { country: rx }];
+      match.$or = [{ campaignId: rx }, { pubId: rx }, { country: rx }, { bundleId: rx }];
     }
 
-    // ---- group _id from selected dimensions ----
-    const groupId = {};
-    groupBy.forEach((d) => {
-      groupId[d] = dimensionExpr(d);
-    });
+    const result = await aggregateGrouped({ match, groupBy, sortBy, sortOrder, page, limit });
+    if (groupBy.includes(DIMENSION.CAMPAIGN)) await enrichCampaignTitles(result.rows);
 
-    const skip = (page - 1) * limit;
-    const sortDir = sortOrder === "asc" ? 1 : -1;
+    return buildResponse(data, range, groupBy, columns, sortBy, sortOrder, page, limit, result);
+  },
 
-    const [result] = await aggregateMetricsModel.aggregate([
-      { $match: match },
-      {
-        $facet: {
-          rows: [
-            { $group: { _id: groupId, ...metricAccumulators } },
-            { $addFields: derivedFields },
-            { $sort: { [sortBy]: sortDir, _id: 1 } },
-            { $skip: skip },
-            { $limit: limit },
-          ],
-          summary: [{ $group: { _id: null, ...metricAccumulators } }],
-          groupCount: [{ $group: { _id: groupId } }, { $count: "count" }],
-        },
-      },
-    ]);
+  // Super-admin (cross-org) statistics report. Spans ALL organisations by
+  // default; can be narrowed by orgId / campaign / bundle. Supports the `org`
+  // and `bundle` dimensions and joins org name + campaign title for display.
+  getSuperReport: async ({ data }) => {
+    const range = resolveRange(data);
+    const { groupBy, columns, sortBy, sortOrder, page, limit } = data;
 
-    const rawRows = (result && result.rows) || [];
-    const summaryDoc = (result && result.summary && result.summary[0]) || {};
-    const totalGroups =
-      (result && result.groupCount && result.groupCount[0] && result.groupCount[0].count) || 0;
-
-    // ---- shape rows: flatten dimensions to top level + rounded metrics ----
-    const rows = rawRows.map((r) => ({
-      ...r._id, // campaign / publisher / country / date / month values
-      ...shapeMetrics(r),
-    }));
-
-    // ---- enrich with campaign title/status when grouped by campaign ----
-    if (groupBy.includes(DIMENSION.CAMPAIGN)) {
-      const ids = rows
-        .map((r) => r[DIMENSION.CAMPAIGN])
-        .filter((id) => isObjectId(id));
-      if (ids.length) {
-        const camps = await campaignModel
-          .find({ _id: { $in: ids } })
-          .select({ title: 1, status: 1 });
-        const map = {};
-        camps.forEach((c) => {
-          map[String(c._id)] = { title: c.title, status: c.status };
-        });
-        rows.forEach((r) => {
-          const c = map[r[DIMENSION.CAMPAIGN]];
-          r.campaignTitle = c ? c.title : null;
-          r.campaignStatus = c ? c.status : null;
-        });
-      }
+    const match = { date: { $gte: range.startDate, $lte: range.endDate } };
+    if (!isUndefinedOrNull(data.orgId) && data.orgId !== "") match.orgId = data.orgId;
+    if (!isUndefinedOrNull(data.campaignIds) && data.campaignIds.length) {
+      match.campaignId = { $in: data.campaignIds };
+    } else if (!isUndefinedOrNull(data.campaignId)) {
+      match.campaignId = data.campaignId;
+    }
+    if (!isUndefinedOrNull(data.bundle) && data.bundle !== "") match.bundleId = data.bundle;
+    if (!isUndefinedOrNull(data.search) && data.search !== "") {
+      const rx = new RegExp(data.search, "i");
+      match.$or = [
+        { campaignId: rx },
+        { pubId: rx },
+        { country: rx },
+        { bundleId: rx },
+        { orgId: rx },
+      ];
     }
 
-    const totals = shapeMetrics(summaryDoc);
+    const result = await aggregateGrouped({ match, groupBy, sortBy, sortOrder, page, limit });
+    if (groupBy.includes(DIMENSION.CAMPAIGN)) await enrichCampaignTitles(result.rows);
+    if (groupBy.includes(SUPER_DIMENSION.ORG)) await enrichOrgNames(result.rows);
 
-    return {
-      groupBy,
-      columns,
-      sort: { by: sortBy, order: sortOrder },
-      range: {
-        preset: data.preset || null,
-        startDate: range.startDate,
-        endDate: range.endDate,
-        timezone: range.tz,
-      },
-      totals,
-      data: rows,
-      pagination: {
-        page,
-        limit,
-        total: totalGroups,
-        totalPages: Math.ceil(totalGroups / limit),
-      },
-    };
+    return buildResponse(data, range, groupBy, columns, sortBy, sortOrder, page, limit, result);
   },
 };
 
