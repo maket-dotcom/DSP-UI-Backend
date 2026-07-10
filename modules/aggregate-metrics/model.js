@@ -13,6 +13,7 @@ var aggregateMetricsSchema = new mongoose.Schema(
         ecpm: String,
         bidCount: String,
         //unitBidPrice: String,
+        bundleId: String,
         eventName: String,
         date: String, // YYYY-MM-DD (date-wise aggregation key)
         source: String, // who produced the row, e.g. "engine" (bid-engine roll-up) or "mmp"
