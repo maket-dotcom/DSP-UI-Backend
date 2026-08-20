@@ -90,8 +90,6 @@ const addCampaign = Joi.object({
     .optional(),
   oemPremiumPartners: Joi.array().items(Joi.string().trim()).optional(),
 
-  // CTV toggle — when true, the campaign may carry video creatives (VAST).
-  ctvEnabled: Joi.boolean().optional(),
 
   media: Joi.array().items(mediaItem).optional(),
 });
@@ -140,7 +138,6 @@ const updateCampaign = Joi.object({
     .optional(),
   oemPremiumPartners: Joi.array().items(Joi.string().trim()).optional(),
 
-  ctvEnabled: Joi.boolean().optional(),
 
   media: Joi.array().items(mediaItem).optional(),
 }).min(1);

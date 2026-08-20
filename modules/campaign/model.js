@@ -74,10 +74,6 @@ var campaignSchema = new mongoose.Schema(
     // Managed exclusively by super admin via the bid-config module.
     enableBidding: { type: Boolean, default: false },
 
-    // CTV toggle: when true the campaign supports video creatives (VAST) and can
-    // bid on video/CTV impressions. When false the campaign is display-only.
-    ctvEnabled: { type: Boolean, default: false },
-
     currency: String,
     bundleId: String,
     appOs: String,
