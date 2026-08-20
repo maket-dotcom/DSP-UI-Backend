@@ -21,7 +21,8 @@ module.exports = {
 
   },
   CTV_GOALS: {
-
+    AWARENESS: 'awareness',
+    COMPLETED_VIEWS: 'completed_views',
   },
 
   AUDIENCE_TARGET: {

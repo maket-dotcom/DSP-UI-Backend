@@ -24,7 +24,20 @@ const mediaSchema = new Schema(
     h: {
       type: Number,
       default: null,
-    }
+    },
+    // --- Video / CTV fields (only set when type === "video") ---
+    duration: {
+      type: Number, // seconds
+      default: null,
+    },
+    vastTag: {
+      type: String, // 3rd-party VAST tag URL (wrapper); empty for a self-hosted video
+      default: null,
+    },
+    mime: {
+      type: String, // e.g. "video/mp4"
+      default: null,
+    },
   },
   { _id: false }
 );
@@ -60,6 +73,10 @@ var campaignSchema = new mongoose.Schema(
     // Whether this campaign is eligible to bid in the engine.
     // Managed exclusively by super admin via the bid-config module.
     enableBidding: { type: Boolean, default: false },
+
+    // CTV toggle: when true the campaign supports video creatives (VAST) and can
+    // bid on video/CTV impressions. When false the campaign is display-only.
+    ctvEnabled: { type: Boolean, default: false },
 
     currency: String,
     bundleId: String,

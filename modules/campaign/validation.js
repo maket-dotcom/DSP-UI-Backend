@@ -10,10 +10,14 @@ const {
 
 const mediaItem = Joi.object({
   id: Joi.string().trim().optional(),
-  link: Joi.string().trim().optional(),
+  link: Joi.string().trim().optional().allow("", null),
   type: Joi.string().trim().optional(),
   w: Joi.number().optional(),
   h: Joi.number().optional(),
+  // Video / CTV creative fields.
+  duration: Joi.number().optional().allow(null),
+  vastTag: Joi.string().trim().optional().allow("", null),
+  mime: Joi.string().trim().optional().allow("", null),
 });
 
 const eventItem = Joi.object({
@@ -86,6 +90,9 @@ const addCampaign = Joi.object({
     .optional(),
   oemPremiumPartners: Joi.array().items(Joi.string().trim()).optional(),
 
+  // CTV toggle — when true, the campaign may carry video creatives (VAST).
+  ctvEnabled: Joi.boolean().optional(),
+
   media: Joi.array().items(mediaItem).optional(),
 });
 
@@ -132,6 +139,8 @@ const updateCampaign = Joi.object({
     .valid(...Object.values(INVENTORY_TYPE))
     .optional(),
   oemPremiumPartners: Joi.array().items(Joi.string().trim()).optional(),
+
+  ctvEnabled: Joi.boolean().optional(),
 
   media: Joi.array().items(mediaItem).optional(),
 }).min(1);
