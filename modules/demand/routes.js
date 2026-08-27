@@ -11,9 +11,10 @@ router.use(authSuperAdmin);
  * @swagger
  * tags:
  *   name: Demand
- *   description: External demand partners (DSP/SSP/exchange) — super admin only.
- *     The engine calls these partners per impression, runs a unified auction with
- *     internal campaigns, and keeps a per-partner margin (the "cut").
+ *   description: External demand partners (DSP/exchange/network, buy-side only) —
+ *     super admin only. The engine calls these partners per impression, runs a
+ *     unified auction with internal campaigns, and takes its cut per the partner's
+ *     deal (revshare or margin on eCPM). Supply-side platforms live in /supply.
  */
 
 /**
@@ -28,8 +29,8 @@ router.use(authSuperAdmin);
  *         name: status
  *         schema: { type: string, enum: [active, paused, deleted] }
  *       - in: query
- *         name: partnerKind
- *         schema: { type: string, enum: [dsp, ssp, exchange, network] }
+ *         name: kind
+ *         schema: { type: string, enum: [dsp, exchange, network] }
  *       - in: query
  *         name: integration
  *         schema: { type: string, enum: [rtb, vast, passback, prebid, deal] }

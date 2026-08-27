@@ -1,15 +1,25 @@
-module.exports = {
-  STATUS: {
-    ACTIVE: "active",
-    PAUSED: "paused",
-    DELETED: "deleted",
-  },
+const {
+  STATUS,
+  AUTH_TYPE,
+  AD_FORMAT,
+  DEAL_MODEL,
+  DEAL_TYPE,
+  AUCTION_TYPE,
+  DEFAULT_CURRENCY,
+} = require("../_shared/constant");
 
-  // What kind of partner this is (label from the architecture; also hints at
-  // money direction). Purely descriptive — the mechanism is the same.
-  PARTNER_KIND: {
+module.exports = {
+  STATUS,
+  AUTH_TYPE,
+  AD_FORMAT,
+  DEAL_MODEL,
+  DEAL_TYPE,
+  AUCTION_TYPE,
+  DEFAULT_CURRENCY,
+
+  // Buy-side only — supply-side platforms live in modules/supply.
+  KIND: {
     DSP: "dsp", // external demand-side platform we call for bids
-    SSP: "ssp", // another supply platform we resell our supply to (for a cut)
     EXCHANGE: "exchange",
     NETWORK: "network",
   },
@@ -28,24 +38,9 @@ module.exports = {
     OPENRTB_26: "openrtb-2.6",
   },
 
-  AUTH_TYPE: {
-    NONE: "none",
-    BEARER: "bearer",
-    HEADER: "header",
-    QUERY: "query",
-  },
-
-  AD_FORMAT: {
-    BANNER: "banner",
-    VIDEO: "video",
-    NATIVE: "native",
-  },
-
   TRAFFIC_TYPE: {
     APP: "app",
     SITE: "site",
     ALL: "all",
   },
-
-  DEFAULT_CURRENCY: "USD",
 };

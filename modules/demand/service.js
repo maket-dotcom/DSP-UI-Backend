@@ -9,10 +9,10 @@ const isObjectId = (v) => typeof v === "string" && /^[a-fA-F0-9]{24}$/.test(v);
 const demandService = {
   // Paginated list for the super-admin table (excludes soft-deleted by default).
   list: async ({ data }) => {
-    const { page, limit, status, partnerKind, integration, search } = data;
+    const { page, limit, status, kind, integration, search } = data;
     const match = {};
     match.status = status || { $ne: STATUS.DELETED };
-    if (!isUndefinedOrNull(partnerKind)) match.partnerKind = partnerKind;
+    if (!isUndefinedOrNull(kind)) match.kind = kind;
     if (!isUndefinedOrNull(integration)) match.integration = integration;
     if (!isUndefinedOrNull(search) && search !== "") {
       match.name = new RegExp(search, "i");
