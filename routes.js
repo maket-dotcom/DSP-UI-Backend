@@ -9,6 +9,7 @@ const { organizationRoute } = require("./modules/organization/index");
 const { aggregateMetricsRoute } = require("./modules/aggregate-metrics/index");
 const { reportRoute } = require("./modules/report/index");
 const { bidConfigRoute } = require("./modules/bidConfig/index");
+const { demandRoute } = require("./modules/demand/index");
 const { superAdminRoute } = require("./modules/superAdmin/index");
 
 
@@ -20,6 +21,7 @@ router.use("/org", organizationRoute);
 router.use("/dashboard", aggregateMetricsRoute);
 router.use("/report", reportRoute);
 router.use("/bid-config", bidConfigRoute);
+router.use("/demand", demandRoute);
 router.use("/super-admin", superAdminRoute);
 
 module.exports = router;
