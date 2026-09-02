@@ -2,8 +2,57 @@ const mongoose = require("mongoose"),
   Schema = mongoose.Schema;
 mongoose.Promise = global.Promise;
 
-const { STATUS, KIND, FLOW, DEFAULT_CURRENCY } = require("./constant");
-const { endpointSchema, authFields, dealFields, dealTermSchema } = require("../_shared/schemas");
+const {
+  STATUS,
+  KIND,
+  FLOW,
+  AUTH_TYPE,
+  DEAL_MODEL,
+  DEAL_TYPE,
+  AUCTION_TYPE,
+  DEFAULT_CURRENCY,
+} = require("./constant");
+
+// A geo-scoped endpoint we push supply to. At call time the engine picks the
+// endpoint whose `geos` match the request country; an endpoint with an empty
+// `geos` is the default (all geos).
+const endpointSchema = new Schema(
+  {
+    label: { type: String, default: null }, // e.g. "US-East", "APAC"
+    url: { type: String, required: true }, // https://partner/rtb
+    geos: { type: [String], default: [] }, // ISO country codes; [] = all
+    tmaxMs: { type: Number, default: 200 }, // think-time we grant this endpoint
+    priority: { type: Number, default: 0 }, // tie-break / waterfall order
+    qps: { type: Number, default: null }, // per-endpoint throttle (null = uncapped)
+  },
+  { _id: false }
+);
+
+// An OpenRTB PMP deal arranged with this supply. Travels on the wire as
+// imp.pmp.deals[] (request) ↔ bid.dealid (response). Deal bids bypass
+// open-auction floors and can carry their own margin.
+const dealTermSchema = new Schema(
+  {
+    dealId: { type: String, required: true }, // the token on the wire
+    name: { type: String, default: null },
+    type: { type: String, default: DEAL_TYPE.PRIVATE_AUCTION },
+    status: { type: String, default: "active" },
+    auctionType: { type: Number, default: AUCTION_TYPE.SECOND_PRICE }, // OpenRTB `at`
+    fixedCpm: { type: Number, default: null }, // preferred / PG
+    floorCpm: { type: Number, default: null }, // private auction
+    currency: { type: String, default: DEFAULT_CURRENCY },
+    wseat: { type: [String], default: [] }, // whitelisted buyer seats
+    marginPctOverride: { type: Number, default: null }, // deal-specific cut ≠ partner default
+    targeting: {
+      geos: { type: [String], default: [] },
+      adFormats: { type: [String], default: [] },
+    },
+    startDate: { type: Date, default: null }, // PG deals are usually time-bound
+    endDate: { type: Date, default: null },
+    volumeGoal: { type: Number, default: null }, // PG: committed impressions (informational)
+  },
+  { _id: false }
+);
 
 // A zone is the unit of supply — what appears in the engine's `?zone=` query
 // param. Today that param is free text with no validation; this config turns
@@ -37,16 +86,24 @@ const supplyPartnerSchema = new mongoose.Schema(
       authToken: { type: String, default: null },
       qps: { type: Number, default: null },
     },
-    // We call them: geo-wise endpoints + auth (shared sub-schemas).
+    // We call them: geo-wise endpoints + auth.
     outbound: {
       endpoints: { type: [endpointSchema], default: [] },
-      auth: authFields,
+      auth: {
+        type: { type: String, default: AUTH_TYPE.NONE },
+        headerName: { type: String, default: null },
+        value: { type: String, default: null }, // token / key (store encrypted in prod)
+      },
     },
 
-    // --- The deal: same shape as demand ⇒ same UI card ---
-    // margin → cut in price; revshare → % of revenue we keep, rest paid out.
+    // --- The deal: the split — revshare, margin on eCPM, or fixed eCPM ---
     deal: {
-      ...dealFields,
+      model: { type: String, default: DEAL_MODEL.MARGIN },
+      revSharePct: { type: Number, default: null }, // model=revshare: % of revenue WE keep
+      marginPct: { type: Number, default: 0 }, // model=margin: cut on eCPM (P × (1−m))
+      fixedCpm: { type: Number, default: null }, // model=fixed: every impression settles at this eCPM
+      minMarginCpm: { type: Number, default: null }, // absolute floor on margin
+      bidAdjustPct: { type: Number, default: 0 }, // trust/discount partner bids (±%)
       floorCpm: { type: Number, default: null }, // partner-level default floor
     },
 
