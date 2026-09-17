@@ -67,4 +67,46 @@ router.post(
   execute(reportController.getReport)
 );
 
+/**
+ * @swagger
+ * /api/v1/report/campaign-bundles:
+ *   post:
+ *     summary: Campaign drill-down — one campaign's delivery grouped by supply bundleId
+ *     description: Opened by clicking a campaign row in the Report. Returns the
+ *       campaign header, campaign-wide totals, and one row per bundleId with the
+ *       core metrics plus eCPM, install rate (cvr), share of spend, and reach
+ *       (countries / placements / active days, first & last seen).
+ *     tags: [Report]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [campaignId]
+ *             properties:
+ *               campaignId: { type: string }
+ *               search: { type: string, description: "Narrow the table to matching bundles (cards stay campaign-wide)" }
+ *               preset: { type: string, enum: [today, yesterday, last_7_days, last_30_days, this_month, last_month] }
+ *               startDate: { type: string, example: "2026-05-01" }
+ *               endDate: { type: string, example: "2026-05-31" }
+ *               timezone: { type: string, example: "Asia/Kolkata" }
+ *               sortBy: { type: string, enum: [impressions, clicks, installs, events, ctr, cvr, spent, ecpm, cpi, cpc, spendShare, countries, placements, activeDays], default: spent }
+ *               sortOrder: { type: string, enum: [asc, desc], default: desc }
+ *               page: { type: integer, default: 1 }
+ *               limit: { type: integer, default: 20, maximum: 200 }
+ *     responses:
+ *       200:
+ *         description: Bundle breakdown fetched successfully
+ */
+router.post(
+  "/campaign-bundles",
+  auth,
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
+  requirePermission(RESOURCES.REPORT, ACTIONS.VIEW),
+  execute(reportController.getCampaignBundles)
+);
+
 module.exports = router;

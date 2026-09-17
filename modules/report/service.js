@@ -6,7 +6,14 @@ const aggregateMetricsModel = require("../aggregate-metrics/model");
 const campaignModel = require("../campaign/model");
 const orgModel = require("../organization/model");
 const { isUndefinedOrNull } = require("../../utils/validators");
-const { EVENT_NAME, CORE_EVENTS, DIMENSION, SUPER_DIMENSION, DATE_PRESET } = require("./constant");
+const {
+  EVENT_NAME,
+  CORE_EVENTS,
+  DIMENSION,
+  SUPER_DIMENSION,
+  DATE_PRESET,
+  BUNDLE_SORT,
+} = require("./constant");
 require("dotenv").config();
 
 /* ------------------------------- helpers ------------------------------- */
@@ -165,6 +172,20 @@ const shapeMetrics = (doc = {}) => {
   };
 };
 
+// Bundle drill-down adds eCPM (spend per 1000 impressions) and install rate
+// (installs ÷ clicks) on top of the core metrics.
+const shapeBundleMetrics = (doc = {}) => {
+  const m = shapeMetrics(doc);
+  return {
+    ...m,
+    cvr: round2(m.clicks > 0 ? (m.installs / m.clicks) * 100 : 0),
+    ecpm: m.impressions > 0 ? round2((m.spent / m.impressions) * 1000) : null,
+  };
+};
+
+// Treat user search text literally inside a RegExp.
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 // Shared aggregation: group the matched rows by the chosen dimensions, compute
 // metrics + derived columns, sort/paginate, and return shaped rows + totals +
 // the total group count. Used by BOTH the org-scoped and super-admin reports.
@@ -322,6 +343,156 @@ const reportService = {
     if (groupBy.includes(SUPER_DIMENSION.ORG)) await enrichOrgNames(result.rows);
 
     return buildResponse(data, range, groupBy, columns, sortBy, sortOrder, page, limit, result);
+  },
+
+  // Campaign drill-down: one campaign's delivery grouped by supply bundleId
+  // (the app/site the ad actually ran in). Adds per-bundle extras the flat
+  // report doesn't carry — eCPM, install rate, share of spend, and reach
+  // (countries / placements / active days, first & last seen).
+  getCampaignBundles: async ({ data, reqBy }) => {
+    const range = resolveRange(data);
+    const { campaignId, sortBy, sortOrder, page, limit } = data;
+
+    if (!isObjectId(campaignId)) throw new Error("Invalid campaign id");
+    const campaign = await campaignModel
+      .findOne({ _id: campaignId, orgId: reqBy.org_id })
+      .select({ title: 1, status: 1, type: 1, appName: 1, bundleId: 1, appOs: 1, appIconLink: 1 });
+    if (isUndefinedOrNull(campaign)) throw new Error(`No campaign exists with id: ${campaignId}`);
+
+    const match = {
+      orgId: reqBy.org_id,
+      campaignId,
+      date: { $gte: range.startDate, $lte: range.endDate },
+    };
+
+    // The bundle search narrows the TABLE only. The summary cards stay
+    // campaign-wide so share-of-spend keeps a stable denominator.
+    const hasSearch = !isUndefinedOrNull(data.search) && data.search !== "";
+    const bundleMatch = hasSearch
+      ? [{ $match: { bundleId: new RegExp(escapeRegex(data.search), "i") } }]
+      : [];
+
+    const bundleKey = { $ifNull: ["$bundleId", ""] };
+    const skip = (page - 1) * limit;
+    const sortDir = sortOrder === "asc" ? 1 : -1;
+    // spendShare is spent ÷ a constant, so it sorts identically to spent.
+    const sortField = sortBy === BUNDLE_SORT.SPEND_SHARE ? BUNDLE_SORT.SPENT : sortBy;
+
+    const [result] = await aggregateMetricsModel.aggregate([
+      { $match: match },
+      {
+        $facet: {
+          rows: [
+            ...bundleMatch,
+            {
+              $group: {
+                _id: bundleKey,
+                ...metricAccumulators,
+                countrySet: { $addToSet: "$country" },
+                placementSet: { $addToSet: "$pubId" },
+                dateSet: { $addToSet: "$date" },
+                firstSeen: { $min: "$date" },
+                lastSeen: { $max: "$date" },
+              },
+            },
+            {
+              $addFields: {
+                ...derivedFields,
+                cvr: {
+                  $cond: [
+                    { $gt: ["$clicks", 0] },
+                    { $multiply: [{ $divide: ["$installs", "$clicks"] }, 100] },
+                    0,
+                  ],
+                },
+                ecpm: {
+                  $cond: [
+                    { $gt: ["$impressions", 0] },
+                    { $multiply: [{ $divide: ["$spent", "$impressions"] }, 1000] },
+                    null,
+                  ],
+                },
+                countrySet: { $setDifference: ["$countrySet", [null, ""]] },
+                placementSet: { $setDifference: ["$placementSet", [null, ""]] },
+              },
+            },
+            {
+              $addFields: {
+                countries: { $size: "$countrySet" },
+                placements: { $size: "$placementSet" },
+                activeDays: { $size: "$dateSet" },
+              },
+            },
+            { $sort: { [sortField]: sortDir, _id: 1 } },
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $project: {
+                placementSet: 0,
+                dateSet: 0,
+              },
+            },
+          ],
+          // Campaign-wide totals (ignores the bundle search) → summary cards.
+          summary: [{ $group: { _id: null, ...metricAccumulators } }],
+          // Totals of what the table is showing → the table's TOTAL row.
+          tableSummary: [...bundleMatch, { $group: { _id: null, ...metricAccumulators } }],
+          groupCount: [...bundleMatch, { $group: { _id: bundleKey } }, { $count: "count" }],
+          allBundles: [{ $group: { _id: bundleKey } }, { $count: "count" }],
+        },
+      },
+    ]);
+
+    const pick = (arr) => (arr && arr[0]) || {};
+    const totals = shapeBundleMetrics(pick(result && result.summary));
+    const tableTotals = shapeBundleMetrics(pick(result && result.tableSummary));
+    const totalGroups = pick(result && result.groupCount).count || 0;
+    const bundleCount = pick(result && result.allBundles).count || 0;
+
+    const rows = ((result && result.rows) || []).map((r) => {
+      const m = shapeBundleMetrics(r);
+      return {
+        bundle: r._id || "",
+        ...m,
+        spendShare: totals.spent > 0 ? round2((m.spent / totals.spent) * 100) : 0,
+        countries: r.countries || 0,
+        placements: r.placements || 0,
+        activeDays: r.activeDays || 0,
+        countryList: (r.countrySet || []).slice().sort().slice(0, 8),
+        firstSeen: r.firstSeen || null,
+        lastSeen: r.lastSeen || null,
+      };
+    });
+
+    return {
+      campaign: {
+        id: String(campaign._id),
+        title: campaign.title || null,
+        status: campaign.status || null,
+        type: campaign.type || null,
+        appName: campaign.appName || null,
+        bundleId: campaign.bundleId || null,
+        appOs: campaign.appOs || null,
+        appIconLink: campaign.appIconLink || null,
+      },
+      sort: { by: sortBy, order: sortOrder },
+      range: {
+        preset: data.preset || null,
+        startDate: range.startDate,
+        endDate: range.endDate,
+        timezone: range.tz,
+      },
+      bundleCount,
+      totals,
+      tableTotals,
+      data: rows,
+      pagination: {
+        page,
+        limit,
+        total: totalGroups,
+        totalPages: Math.ceil(totalGroups / limit),
+      },
+    };
   },
 };
 

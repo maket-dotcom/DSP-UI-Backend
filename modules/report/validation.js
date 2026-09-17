@@ -1,5 +1,12 @@
 const Joi = require("joi");
-const { DIMENSION, SUPER_DIMENSION, METRIC, DATE_PRESET, DEFAULT_COLUMNS } = require("./constant");
+const {
+  DIMENSION,
+  SUPER_DIMENSION,
+  METRIC,
+  DATE_PRESET,
+  DEFAULT_COLUMNS,
+  BUNDLE_SORT,
+} = require("./constant");
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -83,7 +90,30 @@ const getSuperReport = Joi.object({
   limit: Joi.number().integer().min(1).max(200).default(20),
 });
 
+// Campaign drill-down: one campaign's delivery grouped by supply bundleId.
+const getCampaignBundles = Joi.object({
+  campaignId: Joi.string().trim().required(),
+
+  // Narrow to bundles matching this text.
+  search: Joi.string().trim().allow("").optional(),
+
+  preset: Joi.string().valid(...Object.values(DATE_PRESET)).optional(),
+  startDate: Joi.string().pattern(dateRegex).optional().messages({
+    "string.pattern.base": "startDate must be in YYYY-MM-DD format.",
+  }),
+  endDate: Joi.string().pattern(dateRegex).optional().messages({
+    "string.pattern.base": "endDate must be in YYYY-MM-DD format.",
+  }),
+  timezone: Joi.string().trim().default("UTC"),
+
+  sortBy: Joi.string().valid(...Object.values(BUNDLE_SORT)).default(BUNDLE_SORT.SPENT),
+  sortOrder: Joi.string().valid("asc", "desc").default("desc"),
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(200).default(20),
+});
+
 module.exports = {
   getReport,
   getSuperReport,
+  getCampaignBundles,
 };

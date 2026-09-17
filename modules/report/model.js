@@ -12,6 +12,7 @@ var reportSchema = new mongoose.Schema(
         country: String,
         region: String,
         city: String,
+        bundleId: String,
         // Per-event cost; summed to produce the "Spent" metric.
         price: Number,
     },

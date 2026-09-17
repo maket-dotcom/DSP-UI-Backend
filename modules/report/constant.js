@@ -51,6 +51,25 @@ module.exports = {
     CPC: "cpc",
   },
 
+  // Sort keys for the campaign → bundle drill-down. The core metrics plus the
+  // per-bundle extras that page adds (eCPM, install rate, spend share, reach).
+  BUNDLE_SORT: {
+    IMPRESSIONS: "impressions",
+    CLICKS: "clicks",
+    INSTALLS: "installs",
+    EVENTS: "events",
+    CTR: "ctr",
+    CVR: "cvr",
+    SPENT: "spent",
+    ECPM: "ecpm",
+    CPI: "cpi",
+    CPC: "cpc",
+    SPEND_SHARE: "spendShare",
+    COUNTRIES: "countries",
+    PLACEMENTS: "placements",
+    ACTIVE_DAYS: "activeDays",
+  },
+
   // Default columns shown by the Statistics table.
   DEFAULT_COLUMNS: ["impressions", "clicks", "installs", "ctr", "spent"],
 
