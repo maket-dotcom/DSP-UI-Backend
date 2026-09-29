@@ -9,11 +9,11 @@ const {
 } = require("./constant");
 
 const mediaItem = Joi.object({
-  id: Joi.string().trim().optional(),
+  id: Joi.string().trim().optional().allow(null),
   link: Joi.string().trim().optional().allow("", null),
-  type: Joi.string().trim().optional(),
-  w: Joi.number().optional(),
-  h: Joi.number().optional(),
+  type: Joi.string().trim().optional().allow(null),
+  w: Joi.number().optional().allow(null),
+  h: Joi.number().optional().allow(null),
   // Video / CTV creative fields.
   duration: Joi.number().optional().allow(null),
   vastTag: Joi.string().trim().optional().allow("", null),
@@ -73,7 +73,8 @@ const addCampaign = Joi.object({
     .valid(...Object.values(MMP))
     .optional(),
   ctaUrl: Joi.string().trim().optional(),
-  vtaUrl: Joi.string().trim().optional(),
+  // Optional in the UI — an empty string means "no VTA link" and must be accepted.
+  vtaUrl: Joi.string().trim().optional().allow(""),
   eventDetails: Joi.array().items(eventItem).optional(),
 
   geo: Joi.array().items(Joi.string().trim()).optional(),
@@ -121,7 +122,8 @@ const updateCampaign = Joi.object({
     .valid(...Object.values(MMP))
     .optional(),
   ctaUrl: Joi.string().trim().optional(),
-  vtaUrl: Joi.string().trim().optional(),
+  // Optional in the UI — an empty string means "no VTA link" and must be accepted.
+  vtaUrl: Joi.string().trim().optional().allow(""),
   eventDetails: Joi.array().items(eventItem).optional(),
 
   geo: Joi.array().items(Joi.string().trim()).optional(),

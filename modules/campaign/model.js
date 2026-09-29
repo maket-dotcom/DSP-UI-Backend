@@ -26,17 +26,15 @@ const mediaSchema = new Schema(
       default: null,
     },
     // --- Video / CTV fields (only set when type === "video") ---
+    // No default: an image creative simply omits them instead of storing null.
     duration: {
       type: Number, // seconds
-      default: null,
     },
     vastTag: {
       type: String, // 3rd-party VAST tag URL (wrapper); empty for a self-hosted video
-      default: null,
     },
     mime: {
       type: String, // e.g. "video/mp4"
-      default: null,
     },
   },
   { _id: false }
