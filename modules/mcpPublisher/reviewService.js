@@ -1,4 +1,6 @@
 const { mcpServerModel } = require("./model");
+const organizationModel = require("../organization/model");
+const { normalizeCreative } = require("./adCopy");
 const campaignModel = require("../campaign/model");
 const { TYPE: CAMPAIGN_TYPE, STATUS: CAMPAIGN_STATUS } = require("../campaign/constant");
 const { SERVER_STATUS, REVIEW_DECISION, CAMPAIGN_REVIEW_STATUS } = require("./constant");
@@ -66,36 +68,88 @@ const mcpReviewService = {
     return { message: `MCP server ${saved.status}`, data: saved };
   },
 
-  // Cross-org list of MCP campaigns by creative review status.
+  // Cross-org list of campaigns the advertiser opted in to MCP, by review
+  // status. Each row carries a suggested ad built from the campaign's
+  // existing creative so super admin only has to tweak and approve.
   listCampaigns: async ({ data }) => {
     const { page, limit, reviewStatus } = data;
-    const query = {
-      type: CAMPAIGN_TYPE.MCP,
-      status: { $ne: CAMPAIGN_STATUS.DELETED },
-      "mcp.reviewStatus": reviewStatus,
-    };
+    const query = { mcpEnabled: true, status: { $ne: CAMPAIGN_STATUS.DELETED } };
+    if (reviewStatus === CAMPAIGN_REVIEW_STATUS.PENDING) {
+      query.$or = [{ "mcp.reviewStatus": reviewStatus }, { "mcp.reviewStatus": { $exists: false } }];
+    } else {
+      query["mcp.reviewStatus"] = reviewStatus;
+    }
     const skip = (page - 1) * limit;
     const [rows, total] = await Promise.all([
-      campaignModel.find(query).sort({ updatedAt: 1 }).skip(skip).limit(limit),
+      campaignModel.find(query).sort({ mcpRequestedAt: 1, updatedAt: 1 }).skip(skip).limit(limit),
       campaignModel.countDocuments(query),
     ]);
+
+    const orgIds = [...new Set(rows.map((c) => c.orgId).filter(Boolean))];
+    const orgs = await organizationModel.find({ _id: { $in: orgIds } }, { name: 1 });
+    const orgName = Object.fromEntries(orgs.map((o) => [String(o._id), o.name]));
+
     return {
-      data: rows,
+      data: rows.map((c) => {
+        const doc = c.toObject();
+        return { ...doc, orgName: orgName[c.orgId] || null, suggestedMcp: suggestMcp(doc, orgName[c.orgId]) };
+      }),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
     };
+  },
+
+  // Save the MCP ad + targeting for an opted-in campaign. Does not change
+  // the review decision; approve/reject is a separate call.
+  saveCampaignConfig: async ({ id, data, reqBy }) => {
+    const campaign = await campaignModel.findOne({ _id: id, mcpEnabled: true, status: { $ne: CAMPAIGN_STATUS.DELETED } });
+    if (isUndefinedOrNull(campaign)) throw new Error("Campaign is not opted in to MCP: " + id);
+
+    const creative = normalizeCreative(
+      { ...data.creative, imageUrl: data.creative.imageUrl || null },
+      { matchDomain: false }
+    );
+    const prev = campaign.mcp?.toObject?.() || {};
+    const updated = await campaignModel.findOneAndUpdate(
+      { _id: id },
+      {
+        $set: {
+          mcp: {
+            ...data,
+            creative,
+            reviewStatus: prev.reviewStatus || CAMPAIGN_REVIEW_STATUS.PENDING,
+            reviewNotes: prev.reviewNotes || null,
+            reviewedAt: prev.reviewedAt || null,
+            reviewedBy: reqBy.user_id,
+          },
+        },
+      },
+      { new: true }
+    );
+    await notifyMcpChanged("campaign", updated._id);
+    return { message: "MCP ad saved", data: updated };
   },
 
   decideCampaign: async ({ id, data, reqBy }) => {
     if (data.decision === REVIEW_DECISION.REJECT && isUndefinedOrNull(data.notes)) {
       throw new Error("notes are required when rejecting, so the advertiser knows what to fix");
     }
+    const campaign = await campaignModel.findOne({ _id: id, mcpEnabled: true, status: { $ne: CAMPAIGN_STATUS.DELETED } });
+    if (isUndefinedOrNull(campaign)) throw new Error("Campaign is not opted in to MCP: " + id);
+
+    const m = campaign.mcp || {};
+    if (
+      data.decision === REVIEW_DECISION.APPROVE &&
+      (!(m.bid > 0) || !m.categories?.length || !m.creative?.title || !m.creative?.destinationUrl)
+    ) {
+      throw new Error("Configure the MCP ad (bid, categories, copy, destination) before approving");
+    }
+
     const reviewStatus =
       data.decision === REVIEW_DECISION.APPROVE
         ? CAMPAIGN_REVIEW_STATUS.APPROVED
         : CAMPAIGN_REVIEW_STATUS.REJECTED;
-
     const updated = await campaignModel.findOneAndUpdate(
-      { _id: id, type: CAMPAIGN_TYPE.MCP, status: { $ne: CAMPAIGN_STATUS.DELETED } },
+      { _id: id },
       {
         $set: {
           "mcp.reviewStatus": reviewStatus,
@@ -106,10 +160,35 @@ const mcpReviewService = {
       },
       { new: true }
     );
-    if (isUndefinedOrNull(updated)) throw new Error("Invalid MCP campaign id " + id);
     await notifyMcpChanged("campaign", updated._id);
-    return { message: `Campaign creative ${reviewStatus}`, data: updated };
+    return { message: `MCP ad ${reviewStatus}`, data: updated };
   },
+};
+
+// Prefill for the review dialog, from what the advertiser already uploaded.
+const suggestMcp = (c, orgName) => {
+  const image = (c.media || []).find((m) => m.type !== "video" && m.link);
+  const isApp = c.type === CAMPAIGN_TYPE.MOBILE;
+  const destination = c.mcp?.creative?.destinationUrl || c.ctaUrl || "";
+  return {
+    bid: c.mcp?.bid ?? null,
+    categories: c.mcp?.categories ?? [],
+    keywords: c.mcp?.keywords ?? [],
+    negativeKeywords: c.mcp?.negativeKeywords ?? [],
+    intents: c.mcp?.intents ?? [],
+    hosts: c.mcp?.hosts ?? [],
+    frequencyCapPerSession: c.mcp?.frequencyCapPerSession ?? 1,
+    dailyBudget: c.mcp?.dailyBudget ?? null,
+    creative: {
+      advertiser: c.mcp?.creative?.advertiser || c.appName || orgName || "",
+      title: c.mcp?.creative?.title || (isApp && c.appName ? `Get ${c.appName}` : c.title || ""),
+      description: c.mcp?.creative?.description || "",
+      cta: c.mcp?.creative?.cta || (isApp ? "Install" : "Learn more"),
+      destinationUrl: destination,
+      displayDomain: c.mcp?.creative?.displayDomain || "",
+      imageUrl: c.mcp?.creative?.imageUrl || image?.link || c.appIconLink || "",
+    },
+  };
 };
 
 module.exports = mcpReviewService;

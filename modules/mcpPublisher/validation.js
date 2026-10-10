@@ -101,18 +101,36 @@ const reviewCampaignDecision = Joi.object({
   notes: Joi.string().trim().max(1000).optional().allow(null, ""),
 });
 
-// ---- campaign `mcp` sub-document (used by the campaign module) ----
+// ---- super admin: MCP config for an opted-in campaign ----
+
+// http(s) URL that may contain DSP-style {macros} (filled by the bidder at
+// click time). Validated with the macros stubbed out; stored as typed.
+const urlWithMacros = Joi.string()
+  .trim()
+  .max(4096)
+  .custom((value, helpers) => {
+    const probe = value.replace(/\{[A-Za-z0-9_]+\}/g, "x");
+    try {
+      const u = new URL(probe);
+      if (u.protocol === "https:" || u.protocol === "http:") return value;
+    } catch (e) {
+      // fall through
+    }
+    return helpers.message("{{#label}} must be an http(s) URL (CTA macros are allowed)");
+  });
 
 const mcpCreative = Joi.object({
   advertiser: Joi.string().trim().max(40).required(),
   title: Joi.string().trim().max(60).required(),
   description: Joi.string().trim().max(140).required(),
   cta: Joi.string().trim().max(20).default("Learn more"),
-  destinationUrl: Joi.string().trim().uri({ scheme: ["https"] }).max(2048).required(),
+  // Usually the campaign's ctaUrl (MMP tracking link with {macros}).
+  destinationUrl: urlWithMacros.required(),
   displayDomain: Joi.string().trim().lowercase().max(253).optional().allow(null, ""),
+  imageUrl: Joi.string().trim().uri({ scheme: ["https", "http"] }).max(2048).optional().allow(null, ""),
 });
 
-const mcpCampaign = Joi.object({
+const mcpConfig = Joi.object({
   pricingModel: Joi.string()
     .valid(...Object.values(CAMPAIGN_PRICING_MODEL))
     .default(CAMPAIGN_PRICING_MODEL.CPC),
@@ -124,6 +142,7 @@ const mcpCampaign = Joi.object({
   hosts: shortList(50, 64).default([]), // [] = every host
   excludeMcpServerIds: Joi.array().items(objectId).unique().default([]),
   frequencyCapPerSession: Joi.number().integer().min(1).max(10).default(1),
+  dailyBudget: Joi.number().min(0).optional().allow(null), // null = campaign dailyBudget
   creative: mcpCreative.required(),
 });
 
@@ -138,5 +157,5 @@ module.exports = {
   reviewServerDecision,
   reviewListCampaigns,
   reviewCampaignDecision,
-  mcpCampaign,
+  mcpConfig,
 };

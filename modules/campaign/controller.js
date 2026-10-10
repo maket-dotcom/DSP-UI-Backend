@@ -44,6 +44,11 @@ const campaignController = {
     return r;
   },
 
+  setMcpEnabled: async (req, res) => {
+    const data = validateInfo(validate.setMcpEnabled, req.body);
+    return campaignService.setMcpEnabled({ id: req.params.id, data, reqBy: req.user });
+  },
+
   remove: async (req, res) => {
     r = await campaignService.deleteCampaign({ id: req.params.id, reqBy: req.user });
     return r;

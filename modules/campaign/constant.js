@@ -11,9 +11,6 @@ module.exports = {
     MOBILE: 'mobile',
     CTV: 'ctv',
     WEB: 'web',
-    // Sponsored text card served inside publisher MCP tool results by the
-    // MCP bidder. Never loaded by the OpenRTB bid engine.
-    MCP: 'mcp',
   },
   MOBILE_GOALS: {
     INSTALL: 'install',
@@ -61,6 +58,7 @@ module.exports = {
     budget: "Budget",
     dailyBudget: "Daily Budget",
     geo: "Geo",
+    mcpEnabled: "MCP",
   }
 
 };

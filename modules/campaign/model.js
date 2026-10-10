@@ -58,16 +58,18 @@ const customTargating = new Schema(
   { _id: false }
 );
 
-// Text creative + contextual targeting for type === "mcp" campaigns.
-// Read by MCP-BID-BIDDER; only reviewStatus "approved" creatives serve.
+// MCP text ad for a campaign the advertiser opted in (mcpEnabled). Written
+// by super admin from the campaign's existing creative + CTA; read by
+// MCP-BID-BIDDER, which only serves reviewStatus "approved".
 const mcpCreativeSchema = new Schema(
   {
     advertiser: { type: String, default: null },
     title: { type: String, default: null },
     description: { type: String, default: null },
     cta: { type: String, default: null },
-    destinationUrl: { type: String, default: null },
+    destinationUrl: { type: String, default: null }, // defaults to the campaign ctaUrl; {macros} filled at click
     displayDomain: { type: String, default: null },
+    imageUrl: { type: String, default: null }, // one of the campaign's existing media images
   },
   { _id: false }
 );
@@ -83,6 +85,7 @@ const mcpSchema = new Schema(
     hosts: { type: [String], default: [] }, // [] = every MCP host
     excludeMcpServerIds: { type: [String], default: [] },
     frequencyCapPerSession: { type: Number, default: 1 },
+    dailyBudget: { type: Number, default: null }, // USD cap for MCP spend; null = campaign dailyBudget
     creative: { type: mcpCreativeSchema, default: null },
     reviewStatus: { type: String, default: "pending" }, // pending | approved | rejected
     reviewNotes: { type: String, default: null },
@@ -140,7 +143,9 @@ var campaignSchema = new mongoose.Schema(
 
     media: [mediaSchema],
 
-    // only for type === "mcp"
+    // Advertiser opt-in to also run on MCP; super admin configures `mcp`.
+    mcpEnabled: { type: Boolean, default: false },
+    mcpRequestedAt: { type: Date, default: null },
     mcp: { type: mcpSchema, default: undefined },
   },
   { timestamps: true }

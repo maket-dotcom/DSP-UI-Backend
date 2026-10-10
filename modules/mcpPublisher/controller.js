@@ -51,6 +51,11 @@ const mcpPublisherController = {
     const data = validateInfo(validate.reviewListCampaigns, req.query);
     return mcpReviewService.listCampaigns({ data });
   },
+  reviewCategories: async () => mcpPublisherService.listCategories(),
+  reviewSaveCampaignConfig: async (req) => {
+    const data = validateInfo(validate.mcpConfig, req.body);
+    return mcpReviewService.saveCampaignConfig({ id: id(req), data, reqBy: req.user });
+  },
   reviewDecideCampaign: async (req) => {
     const data = validateInfo(validate.reviewCampaignDecision, req.body);
     return mcpReviewService.decideCampaign({ id: id(req), data, reqBy: req.user });
