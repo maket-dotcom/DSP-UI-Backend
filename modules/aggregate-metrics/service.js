@@ -2,6 +2,11 @@ const aggregateMetricsModel = require("./model");
 const campaignModel = require("../campaign/model");
 const orgModel = require("../organization/model");
 const userDetailsModel = require("../user/model");
+const { ORG_TYPE } = require("../organization/constant");
+
+// MCP publisher (supply) orgs are not advertisers; keep them out of the
+// advertiser org counts and rollups.
+const ADVERTISER_ORGS = { type: { $ne: ORG_TYPE.PUBLISHER } };
 const { isUndefinedOrNull } = require("../../utils/validators");
 const { CORE_EVENTS, METRIC, DATE_PRESET, EVENT_NAME } = require("./constant");
 const {
@@ -447,7 +452,7 @@ const aggregateMetricsService = {
     const [campTotal, campActive, orgTotal] = await Promise.all([
       campaignModel.countDocuments({ status: { $ne: CAMPAIGN_STATUS.DELETED } }),
       campaignModel.countDocuments({ status: CAMPAIGN_STATUS.ACTIVE }),
-      orgModel.countDocuments({}),
+      orgModel.countDocuments(ADVERTISER_ORGS),
     ]);
 
     return {
@@ -495,7 +500,7 @@ const aggregateMetricsService = {
     });
 
     const orgs = await orgModel
-      .find({})
+      .find(ADVERTISER_ORGS)
       .select({ name: 1, subdomain: 1, adminId: 1 });
 
     const adminIds = orgs.map((o) => o.adminId).filter(Boolean);

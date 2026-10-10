@@ -11,8 +11,9 @@ const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // Allowed super-admin transitions for an MCP server.
 const SERVER_TRANSITIONS = {
+  // Super admin may approve without waiting for the publisher to submit.
   [REVIEW_DECISION.APPROVE]: {
-    from: [SERVER_STATUS.IN_REVIEW, SERVER_STATUS.SUSPENDED],
+    from: [SERVER_STATUS.DRAFT, SERVER_STATUS.IN_REVIEW, SERVER_STATUS.REJECTED, SERVER_STATUS.SUSPENDED],
     to: SERVER_STATUS.LIVE,
   },
   [REVIEW_DECISION.REJECT]: {
@@ -26,15 +27,18 @@ const SERVER_TRANSITIONS = {
 };
 
 const mcpReviewService = {
-  // Cross-org list for the review queue (defaults to in_review).
+  // Cross-org list for the review queue; no status (or "all") = every
+  // non-deleted server, waiting-for-review first.
   listServers: async ({ data }) => {
     const { page, limit, status, search } = data;
-    const query = { status: status || SERVER_STATUS.IN_REVIEW };
+    const query = {
+      status: !status || status === "all" ? { $ne: SERVER_STATUS.DELETED } : status,
+    };
     if (!isUndefinedOrNull(search)) query.name = new RegExp(escapeRegex(search), "i");
 
     const skip = (page - 1) * limit;
     const [rows, total] = await Promise.all([
-      mcpServerModel.find(query).sort({ submittedAt: 1, createdAt: 1 }).skip(skip).limit(limit),
+      mcpServerModel.find(query).sort({ submittedAt: -1, createdAt: -1 }).skip(skip).limit(limit),
       mcpServerModel.countDocuments(query),
     ]);
     return {

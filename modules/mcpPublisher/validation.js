@@ -80,7 +80,9 @@ const createKey = Joi.object({
 
 // ---- super admin review ----
 
-const reviewListServers = listServers;
+const reviewListServers = listServers.keys({
+  status: Joi.string().valid("all", ...Object.values(SERVER_STATUS)).optional(),
+});
 
 const reviewServerDecision = Joi.object({
   decision: Joi.string().valid(...Object.values(REVIEW_DECISION)).required(),
