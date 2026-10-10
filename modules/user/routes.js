@@ -78,6 +78,53 @@ router.post("/super-admin/login", execute(userController.superAdminLogin));
 
 /**
  * @swagger
+ * /api/v1/user/supply/signup:
+ *   post:
+ *     summary: Self-serve signup for MCP publishers (creates a publisher org + supply user)
+ *     tags: [User]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [orgName, name, email, password]
+ *             properties:
+ *               orgName: { type: string }
+ *               name: { type: string }
+ *               email: { type: string }
+ *               mobile: { type: string }
+ *               password: { type: string, minLength: 8 }
+ *     responses:
+ *       200:
+ *         description: Account created and logged in (returns bearer token)
+ */
+router.post("/supply/signup", execute(userController.supplySignup));
+
+/**
+ * @swagger
+ * /api/v1/user/supply/login:
+ *   post:
+ *     summary: MCP publisher (supply) login — email + password, no orgId
+ *     tags: [User]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email: { type: string }
+ *               password: { type: string }
+ *     responses:
+ *       200:
+ *         description: Logged in successfully (returns bearer token)
+ */
+router.post("/supply/login", execute(userController.supplyLogin));
+
+/**
+ * @swagger
  * /api/v1/user/super-admin/create-org:
  *   post:
  *     summary: (super-admin) Create an organisation and its admin user

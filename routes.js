@@ -12,6 +12,7 @@ const { bidConfigRoute } = require("./modules/bidConfig/index");
 const { demandRoute } = require("./modules/demand/index");
 const { supplyRoute } = require("./modules/supply/index");
 const { superAdminRoute } = require("./modules/superAdmin/index");
+const { mcpPublisherRoute, mcpReviewRoute } = require("./modules/mcpPublisher/index");
 
 
 router.use("/user", userRoute);
@@ -25,5 +26,7 @@ router.use("/bid-config", bidConfigRoute);
 router.use("/demand", demandRoute);
 router.use("/supply", supplyRoute);
 router.use("/super-admin", superAdminRoute);
+router.use("/mcp-publisher", mcpPublisherRoute);
+router.use("/mcp-review", mcpReviewRoute);
 
 module.exports = router;

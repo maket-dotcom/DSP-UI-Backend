@@ -49,6 +49,24 @@ const superAdminLogin = Joi.object({
   password: Joi.string().required(),
 });
 
+// self-serve MCP publisher signup (creates a publisher org + supply user)
+const supplySignup = Joi.object({
+  orgName: Joi.string().trim().min(2).max(100).required(),
+  name: Joi.string().trim().required(),
+  email: Joi.string()
+    .trim()
+    .lowercase()
+    .required()
+    .pattern(emailRegex)
+    .messages({
+      'string.empty': 'Email is required.',
+      'string.pattern.base': 'Please enter a valid email address.',
+      'any.required': 'Email is required.',
+    }),
+  mobile: Joi.string().trim().optional(),
+  password: Joi.string().min(8).required(),
+});
+
 // super-admin onboarding: create an organisation and its admin user in one call
 const createOrgWithAdmin = Joi.object({
   orgName: Joi.string().trim().required(),
@@ -119,6 +137,7 @@ const listUsers = Joi.object({
 module.exports = {
   login,
   superAdminLogin,
+  supplySignup,
   createOrgWithAdmin,
   createUser,
   updateUser,

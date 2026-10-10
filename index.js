@@ -58,7 +58,9 @@ const options = {
     "./modules/campaign/routes.js",
     "./modules/organization/routes.js",
     "./modules/aggregate-metrics/routes.js",
-    "./modules/report/routes.js"
+    "./modules/report/routes.js",
+    "./modules/mcpPublisher/routes.js",
+    "./modules/mcpPublisher/reviewRoutes.js"
   ],
 };
 

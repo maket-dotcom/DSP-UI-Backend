@@ -5,7 +5,42 @@ const { isUndefinedOrNull } = require("../../utils/validators");
 const { appStore } = require("../../utils/appStore");
 const { gcs } = require("../../utils/gcs");
 const { STATUS, TYPE, DATA_MAPPING } = require("./constant");
+const { normalizeCreative } = require("../mcpPublisher/adCopy");
+const { notifyMcpChanged } = require("../mcpPublisher/notify");
+const { CAMPAIGN_REVIEW_STATUS } = require("../mcpPublisher/constant");
 require("dotenv").config();
+
+// Any change to what the user would see (copy or landing page) sends an MCP
+// creative back to review; targeting/bid changes keep the current decision.
+const prepareMcpBlock = ({ next, prev }) => {
+  const creative = normalizeCreative(next.creative);
+  const fields = ["advertiser", "title", "description", "cta", "destinationUrl", "displayDomain"];
+  const creativeChanged =
+    !prev?.creative || fields.some((f) => (prev.creative[f] || null) !== (creative[f] || null));
+
+  if (!prev || creativeChanged) {
+    return {
+      ...next,
+      creative,
+      reviewStatus: CAMPAIGN_REVIEW_STATUS.PENDING,
+      reviewNotes: null,
+      reviewedAt: null,
+      reviewedBy: null,
+    };
+  }
+  return {
+    ...next,
+    creative,
+    reviewStatus: prev.reviewStatus,
+    reviewNotes: prev.reviewNotes,
+    reviewedAt: prev.reviewedAt,
+    reviewedBy: prev.reviewedBy,
+  };
+};
+
+const notifyIfMcp = async (campaign) => {
+  if (campaign?.type === TYPE.MCP) await notifyMcpChanged("campaign", campaign._id);
+};
 
 // True when the URL already points at our own GCS bucket (public or signed).
 // Such URLs are already stored by us, so we must NOT try to re-download them
@@ -56,11 +91,16 @@ const campaignService = {
     }
     // delete payload.appIconUrl; // never store the external URL
 
+    if (payload.type === TYPE.MCP) {
+      payload.mcp = prepareMcpBlock({ next: payload.mcp, prev: null });
+    }
+
     const campaign = new campaignModel(payload);
     if (isUndefinedOrNull(campaign.status)) {
       campaign.status = STATUS.PAUSED;
     }
     const saved = await campaign.save();
+    await notifyIfMcp(saved);
     return { message: "Campaign created successfully", data: saved };
   },
 
@@ -132,6 +172,27 @@ const campaignService = {
     }
     //delete payload.appIconUrl; // never store the external URL
 
+    // MCP campaigns are a different product (text card, CPC); switching a
+    // campaign into or out of "mcp" would leave half-valid data behind.
+    if (!isUndefinedOrNull(payload.type) || !isUndefinedOrNull(payload.mcp)) {
+      const existing = await campaignModel.findOne({
+        _id: id,
+        orgId: reqBy.org_id,
+        status: { $ne: STATUS.DELETED },
+      });
+      if (isUndefinedOrNull(existing)) {
+        throw new Error("Invalid campaign id " + id);
+      }
+      const wasMcp = existing.type === TYPE.MCP;
+      if (!isUndefinedOrNull(payload.type) && (payload.type === TYPE.MCP) !== wasMcp) {
+        throw new Error("A campaign cannot be switched to or from type mcp; create a new campaign");
+      }
+      if (!isUndefinedOrNull(payload.mcp)) {
+        if (!wasMcp) throw new Error("mcp settings are only allowed on mcp campaigns");
+        payload.mcp = prepareMcpBlock({ next: payload.mcp, prev: existing.mcp?.toObject?.() || existing.mcp });
+      }
+    }
+
     const updated = await campaignModel.findOneAndUpdate(
       { _id: id, orgId: reqBy.org_id, status: { $ne: STATUS.DELETED } },
       { $set: payload },
@@ -140,6 +201,7 @@ const campaignService = {
     if (isUndefinedOrNull(updated)) {
       throw new Error("Invalid campaign id " + id);
     }
+    await notifyIfMcp(updated);
     return { message: "Campaign updated successfully", data: updated };
   },
 
@@ -154,6 +216,7 @@ const campaignService = {
     if (isUndefinedOrNull(updated)) {
       throw new Error("Invalid campaign id " + id);
     }
+    await notifyIfMcp(updated);
     return { message: "Campaign status updated successfully", data: updated };
   },
 
@@ -166,6 +229,7 @@ const campaignService = {
     if (isUndefinedOrNull(deleted)) {
       throw new Error("Invalid campaign id " + id);
     }
+    await notifyIfMcp(deleted);
     return { message: "Campaign deleted successfully" };
   },
 

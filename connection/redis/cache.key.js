@@ -30,6 +30,16 @@ class ApplicationRedisCache {
         });
     }
 
+    // Fire a pub/sub message (e.g. tell the MCP bidder to reload its index).
+    static async publish(channel, message) {
+        return new Promise((resolve, reject) => {
+            RedisClient.publish(channel, message, (err, receivers) => {
+                if (err) reject(err);
+                resolve(receivers);
+            });
+        });
+    }
+
     static async getKeysByPattern(pattern) {
         return new Promise((resolve, reject) => {
             RedisClient.keys(pattern, (err, keys) => {

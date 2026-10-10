@@ -10,7 +10,10 @@ module.exports = {
   TYPE: {
     MOBILE: 'mobile',
     CTV: 'ctv',
-    WEB: 'web'
+    WEB: 'web',
+    // Sponsored text card served inside publisher MCP tool results by the
+    // MCP bidder. Never loaded by the OpenRTB bid engine.
+    MCP: 'mcp',
   },
   MOBILE_GOALS: {
     INSTALL: 'install',

@@ -58,6 +58,40 @@ const customTargating = new Schema(
   { _id: false }
 );
 
+// Text creative + contextual targeting for type === "mcp" campaigns.
+// Read by MCP-BID-BIDDER; only reviewStatus "approved" creatives serve.
+const mcpCreativeSchema = new Schema(
+  {
+    advertiser: { type: String, default: null },
+    title: { type: String, default: null },
+    description: { type: String, default: null },
+    cta: { type: String, default: null },
+    destinationUrl: { type: String, default: null },
+    displayDomain: { type: String, default: null },
+  },
+  { _id: false }
+);
+
+const mcpSchema = new Schema(
+  {
+    pricingModel: { type: String, default: "cpc" },
+    bid: { type: Number, default: null }, // USD per valid click
+    categories: { type: [String], default: [] },
+    intents: { type: [String], default: [] },
+    keywords: { type: [String], default: [] },
+    negativeKeywords: { type: [String], default: [] },
+    hosts: { type: [String], default: [] }, // [] = every MCP host
+    excludeMcpServerIds: { type: [String], default: [] },
+    frequencyCapPerSession: { type: Number, default: 1 },
+    creative: { type: mcpCreativeSchema, default: null },
+    reviewStatus: { type: String, default: "pending" }, // pending | approved | rejected
+    reviewNotes: { type: String, default: null },
+    reviewedAt: { type: Date, default: null },
+    reviewedBy: { type: String, default: null },
+  },
+  { _id: false }
+);
+
 var campaignSchema = new mongoose.Schema(
   {
     orgId: String,
@@ -105,6 +139,9 @@ var campaignSchema = new mongoose.Schema(
 
 
     media: [mediaSchema],
+
+    // only for type === "mcp"
+    mcp: { type: mcpSchema, default: undefined },
   },
   { timestamps: true }
 );
