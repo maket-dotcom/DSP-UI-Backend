@@ -30,7 +30,7 @@ router.get("/categories", execute(controller.reviewCategories));
  * @swagger
  * /api/v1/mcp-review/servers:
  *   get:
- *     summary: List MCP servers across orgs (defaults to in_review)
+ *     summary: List MCP servers across orgs (status=all or omitted: every non-deleted server)
  *     tags: [MCP Review]
  *     security: [ { bearerAuth: [] } ]
  *     parameters:
