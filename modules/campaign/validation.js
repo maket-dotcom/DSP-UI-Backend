@@ -7,6 +7,7 @@ const {
   MMP,
   APP_PLATFORM,
 } = require("./constant");
+const { mcpCampaign } = require("../mcpPublisher/validation");
 
 const mediaItem = Joi.object({
   id: Joi.string().trim().optional().allow(null),
@@ -93,6 +94,12 @@ const addCampaign = Joi.object({
 
 
   media: Joi.array().items(mediaItem).optional(),
+
+  mcp: Joi.when("type", {
+    is: TYPE.MCP,
+    then: mcpCampaign.required(),
+    otherwise: Joi.forbidden(),
+  }),
 });
 
 const updateCampaign = Joi.object({
@@ -142,6 +149,9 @@ const updateCampaign = Joi.object({
 
 
   media: Joi.array().items(mediaItem).optional(),
+
+  // full replacement of the mcp block; only valid on mcp campaigns (checked in service)
+  mcp: mcpCampaign.optional(),
 }).min(1);
 
 const changeStatus = Joi.object({

@@ -5,6 +5,9 @@ module.exports = {
     SUPER_ADMIN: "super_admin",
     ADMIN: "admin",
     TEAM: "team",
+    // Self-serve MCP publisher. Confined to /mcp-publisher routes; every other
+    // guarded route lists its allowed types explicitly and excludes this one.
+    SUPPLY: "supply",
   },
 
   STATUS: {

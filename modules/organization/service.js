@@ -2,6 +2,7 @@ const organizationModel = require("./model");
 const _ = require('lodash');
 const { RedisCacheKey } = require("../../connection/redis");
 const { isUndefinedOrNull } = require("../../utils/validators");
+const { ORG_TYPE } = require("./constant");
 
 require("dotenv").config();
 
@@ -119,7 +120,12 @@ const get = async ({ reqBy }) => {
 }
 
 const getOrgList = async () => {
-  const orgData = await organizationModel.find({}, { _id: 1, name: 1 });
+  // Feeds the advertiser login org picker: MCP publisher orgs log in through
+  // /user/supply/login and must not be listed here.
+  const orgData = await organizationModel.find(
+    { type: { $ne: ORG_TYPE.PUBLISHER } },
+    { _id: 1, name: 1 }
+  );
   const details = [];
   _.each(orgData, (org) => {
     details.push({

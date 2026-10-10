@@ -142,6 +142,93 @@ const userService = {
     };
   },
 
+  // Self-serve signup for MCP publishers: creates a `publisher` org and its
+  // single `supply` user, then logs them in. Supply users only ever reach the
+  // /mcp-publisher routes; ads only fill once super admin approves a server.
+  supplySignup: async ({ data }) => {
+    const { orgName, name, email, mobile, password } = data;
+
+    let existing = await userDetailsModel.findOne({ email });
+    if (!isUndefinedOrNull(existing)) {
+      throw new Error("Email Id already registred " + email);
+    }
+    if (!isUndefinedOrNull(mobile)) {
+      existing = await userDetailsModel.findOne({ mobile });
+      if (!isUndefinedOrNull(existing)) {
+        throw new Error("Contact number already registred " + mobile);
+      }
+    }
+
+    const org = await organizationService.addOrganization({
+      data: { orgType: organizationConstant.ORG_TYPE.PUBLISHER, orgName },
+    });
+
+    const user = new userDetailsModel();
+    user.name = name;
+    user.email = email;
+    user.mobile = mobile;
+    user.type = TYPE.SUPPLY;
+    user.status = STATUS.ACTIVE;
+    user.orgId = org._id;
+    user.isVerified = false;
+    user.password = await bcrypt.hash(password, 10);
+    const savedUser = await user.save();
+
+    await organizationService.updateAdminId({ org, adminId: savedUser._id });
+
+    const token = await issueToken(savedUser);
+
+    return {
+      message: "Account created successfully",
+      data: {
+        token,
+        user: {
+          _id: savedUser._id,
+          name: savedUser.name,
+          email: savedUser.email,
+          type: savedUser.type,
+          orgId: savedUser.orgId,
+        },
+      },
+    };
+  },
+
+  // Supply login is by email alone (no orgId): supply emails are globally
+  // unique because supplySignup rejects any email already registered.
+  supplyLogin: async ({ data }) => {
+    const { email, password } = data;
+
+    const user = await userDetailsModel.findOne({ email, type: TYPE.SUPPLY });
+
+    if (isUndefinedOrNull(user)) {
+      throw new Error("Invalid credentials");
+    }
+    if (user.status === STATUS.DELETED || user.status === STATUS.INACTIVE) {
+      throw new Error("Account is not active");
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password || "");
+    if (!isMatch) {
+      throw new Error("Invalid credentials");
+    }
+
+    const token = await issueToken(user);
+
+    return {
+      message: "Logged in successfully",
+      data: {
+        token,
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          type: user.type,
+          orgId: user.orgId,
+        },
+      },
+    };
+  },
+
   // super-admin only: provision a new organisation together with its admin user
   createOrgWithAdmin: async ({ data }) => {
     let {

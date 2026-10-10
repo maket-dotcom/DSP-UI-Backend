@@ -18,6 +18,18 @@ const userController = {
   },
 
   // super-admin only: create an org and its admin in one call
+  // self-serve MCP publisher signup + login
+  supplySignup: async (req, res) => {
+    const data = validateInfo(validate.supplySignup, req.body);
+    return userService.supplySignup({ data });
+  },
+
+  supplyLogin: async (req, res) => {
+    // same shape as super-admin login: email + password, no orgId
+    const data = validateInfo(validate.superAdminLogin, req.body);
+    return userService.supplyLogin({ data });
+  },
+
   createOrgWithAdmin: async (req, res) => {
     const data = validateInfo(validate.createOrgWithAdmin, req.body);
     r = await userService.createOrgWithAdmin({ data, reqBy: req.user });
