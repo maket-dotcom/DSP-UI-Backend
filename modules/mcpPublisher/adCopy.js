@@ -23,12 +23,13 @@ const hostnameOf = (url) => {
   }
 };
 
-// Validates an MCP creative in place and fills displayDomain. Throws on
-// anything that should not reach review.
-const normalizeCreative = (creative) => {
+// Validates an MCP creative and fills displayDomain. Throws on anything that
+// must not serve. `matchDomain: false` lets super admin show the brand's
+// domain for MMP tracking links (app.appsflyer.com → brand.com).
+const normalizeCreative = (creative, { matchDomain = true } = {}) => {
   const host = hostnameOf(creative.destinationUrl);
-  if (isUndefinedOrNull(host) || !creative.destinationUrl.startsWith("https://")) {
-    throw new Error("destinationUrl must be a valid https URL");
+  if (isUndefinedOrNull(host)) {
+    throw new Error("destinationUrl must be a valid URL");
   }
 
   for (const field of ["advertiser", "title", "description", "cta"]) {
@@ -45,7 +46,7 @@ const normalizeCreative = (creative) => {
   }
 
   const displayDomain = (creative.displayDomain || host).toLowerCase().replace(/^www\./, "");
-  if (host !== displayDomain && !host.endsWith(`.${displayDomain}`)) {
+  if (matchDomain && host !== displayDomain && !host.endsWith(`.${displayDomain}`)) {
     throw new Error(`displayDomain (${displayDomain}) must match the destinationUrl host (${host})`);
   }
 

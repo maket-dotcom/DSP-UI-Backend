@@ -17,6 +17,17 @@ router.use(authSuperAdmin);
 
 /**
  * @swagger
+ * /api/v1/mcp-review/categories:
+ *   get:
+ *     summary: MCP category taxonomy and intents (for configuring campaigns)
+ *     tags: [MCP Review]
+ *     security: [ { bearerAuth: [] } ]
+ *     responses: { 200: { description: Categories and intents } }
+ */
+router.get("/categories", execute(controller.reviewCategories));
+
+/**
+ * @swagger
  * /api/v1/mcp-review/servers:
  *   get:
  *     summary: List MCP servers across orgs (defaults to in_review)
@@ -56,7 +67,7 @@ router.post("/servers/:id/decision", execute(controller.reviewDecideServer));
  * @swagger
  * /api/v1/mcp-review/campaigns:
  *   get:
- *     summary: List MCP campaigns by creative review status (defaults to pending)
+ *     summary: List campaigns opted in to MCP by review status (defaults to pending), with a suggested ad
  *     tags: [MCP Review]
  *     security: [ { bearerAuth: [] } ]
  *     parameters: [ { in: query, name: reviewStatus, schema: { type: string, enum: [pending, approved, rejected] } } ]
@@ -68,7 +79,7 @@ router.get("/campaigns", execute(controller.reviewListCampaigns));
  * @swagger
  * /api/v1/mcp-review/campaigns/{id}/decision:
  *   post:
- *     summary: Approve or reject an MCP campaign's creative
+ *     summary: Approve or reject an opted-in campaign's MCP ad (approve requires a saved config)
  *     tags: [MCP Review]
  *     security: [ { bearerAuth: [] } ]
  *     parameters: [ { in: path, name: id, required: true, schema: { type: string } } ]
@@ -85,5 +96,39 @@ router.get("/campaigns", execute(controller.reviewListCampaigns));
  *     responses: { 200: { description: Decision applied } }
  */
 router.post("/campaigns/:id/decision", execute(controller.reviewDecideCampaign));
+
+/**
+ * @swagger
+ * /api/v1/mcp-review/campaigns/{id}/config:
+ *   put:
+ *     summary: Set the MCP ad (copy, destination, image) and bid/targeting for an opted-in campaign
+ *     tags: [MCP Review]
+ *     security: [ { bearerAuth: [] } ]
+ *     parameters: [ { in: path, name: id, required: true, schema: { type: string } } ]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [bid, categories, creative]
+ *             properties:
+ *               bid: { type: number, description: "USD per valid click" }
+ *               categories: { type: array, items: { type: string } }
+ *               keywords: { type: array, items: { type: string } }
+ *               dailyBudget: { type: number, description: "USD cap for MCP spend; empty = campaign dailyBudget" }
+ *               creative:
+ *                 type: object
+ *                 properties:
+ *                   advertiser: { type: string }
+ *                   title: { type: string }
+ *                   description: { type: string }
+ *                   cta: { type: string }
+ *                   destinationUrl: { type: string }
+ *                   displayDomain: { type: string }
+ *                   imageUrl: { type: string }
+ *     responses: { 200: { description: Saved } }
+ */
+router.put("/campaigns/:id/config", execute(controller.reviewSaveCampaignConfig));
 
 module.exports = router;

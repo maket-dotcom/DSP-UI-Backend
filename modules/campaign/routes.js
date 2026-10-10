@@ -315,6 +315,42 @@ router.patch(
 
 /**
  * @swagger
+ * /api/v1/campaign/mcp/{id}:
+ *   patch:
+ *     summary: Opt a campaign in/out of the MCP bidder (super admin then reviews and configures it)
+ *     tags: [Campaign]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [enabled]
+ *             properties:
+ *               enabled:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: MCP opt-in updated
+ */
+router.patch(
+  "/mcp/:id",
+  auth,
+  accessAllowed([USER_TYPE.SUPER_ADMIN, USER_TYPE.ADMIN, USER_TYPE.TEAM]),
+  requirePermission(RESOURCES.CAMPAIGN, ACTIONS.UPDATE),
+  execute(campaignController.setMcpEnabled)
+);
+
+/**
+ * @swagger
  * /api/v1/campaign/delete/{id}:
  *   delete:
  *     summary: Delete (soft) a campaign within the caller's organisation

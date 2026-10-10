@@ -5,41 +5,13 @@ const { isUndefinedOrNull } = require("../../utils/validators");
 const { appStore } = require("../../utils/appStore");
 const { gcs } = require("../../utils/gcs");
 const { STATUS, TYPE, DATA_MAPPING } = require("./constant");
-const { normalizeCreative } = require("../mcpPublisher/adCopy");
 const { notifyMcpChanged } = require("../mcpPublisher/notify");
 const { CAMPAIGN_REVIEW_STATUS } = require("../mcpPublisher/constant");
 require("dotenv").config();
 
-// Any change to what the user would see (copy or landing page) sends an MCP
-// creative back to review; targeting/bid changes keep the current decision.
-const prepareMcpBlock = ({ next, prev }) => {
-  const creative = normalizeCreative(next.creative);
-  const fields = ["advertiser", "title", "description", "cta", "destinationUrl", "displayDomain"];
-  const creativeChanged =
-    !prev?.creative || fields.some((f) => (prev.creative[f] || null) !== (creative[f] || null));
-
-  if (!prev || creativeChanged) {
-    return {
-      ...next,
-      creative,
-      reviewStatus: CAMPAIGN_REVIEW_STATUS.PENDING,
-      reviewNotes: null,
-      reviewedAt: null,
-      reviewedBy: null,
-    };
-  }
-  return {
-    ...next,
-    creative,
-    reviewStatus: prev.reviewStatus,
-    reviewNotes: prev.reviewNotes,
-    reviewedAt: prev.reviewedAt,
-    reviewedBy: prev.reviewedBy,
-  };
-};
-
+// Tell the MCP bidder when an opted-in campaign changes (status, budget, …).
 const notifyIfMcp = async (campaign) => {
-  if (campaign?.type === TYPE.MCP) await notifyMcpChanged("campaign", campaign._id);
+  if (campaign?.mcpEnabled) await notifyMcpChanged("campaign", campaign._id);
 };
 
 // True when the URL already points at our own GCS bucket (public or signed).
@@ -91,16 +63,11 @@ const campaignService = {
     }
     // delete payload.appIconUrl; // never store the external URL
 
-    if (payload.type === TYPE.MCP) {
-      payload.mcp = prepareMcpBlock({ next: payload.mcp, prev: null });
-    }
-
     const campaign = new campaignModel(payload);
     if (isUndefinedOrNull(campaign.status)) {
       campaign.status = STATUS.PAUSED;
     }
     const saved = await campaign.save();
-    await notifyIfMcp(saved);
     return { message: "Campaign created successfully", data: saved };
   },
 
@@ -172,24 +139,19 @@ const campaignService = {
     }
     //delete payload.appIconUrl; // never store the external URL
 
-    // MCP campaigns are a different product (text card, CPC); switching a
-    // campaign into or out of "mcp" would leave half-valid data behind.
-    if (!isUndefinedOrNull(payload.type) || !isUndefinedOrNull(payload.mcp)) {
-      const existing = await campaignModel.findOne({
-        _id: id,
-        orgId: reqBy.org_id,
-        status: { $ne: STATUS.DELETED },
-      });
-      if (isUndefinedOrNull(existing)) {
-        throw new Error("Invalid campaign id " + id);
-      }
-      const wasMcp = existing.type === TYPE.MCP;
-      if (!isUndefinedOrNull(payload.type) && (payload.type === TYPE.MCP) !== wasMcp) {
-        throw new Error("A campaign cannot be switched to or from type mcp; create a new campaign");
-      }
-      if (!isUndefinedOrNull(payload.mcp)) {
-        if (!wasMcp) throw new Error("mcp settings are only allowed on mcp campaigns");
-        payload.mcp = prepareMcpBlock({ next: payload.mcp, prev: existing.mcp?.toObject?.() || existing.mcp });
+    // An approved MCP ad links to the campaign's CTA. If the advertiser
+    // changes that link, the ad goes back to super-admin review.
+    if (!isUndefinedOrNull(payload.ctaUrl)) {
+      const existing = await campaignModel
+        .findOne({ _id: id, orgId: reqBy.org_id, status: { $ne: STATUS.DELETED } })
+        .select({ ctaUrl: 1, mcpEnabled: 1, mcp: 1 });
+      if (
+        existing?.mcpEnabled &&
+        existing.mcp?.reviewStatus === CAMPAIGN_REVIEW_STATUS.APPROVED &&
+        existing.ctaUrl !== payload.ctaUrl
+      ) {
+        payload["mcp.reviewStatus"] = CAMPAIGN_REVIEW_STATUS.PENDING;
+        payload["mcp.reviewNotes"] = "CTA link changed — please re-check the MCP ad destination.";
       }
     }
 
@@ -218,6 +180,38 @@ const campaignService = {
     }
     await notifyIfMcp(updated);
     return { message: "Campaign status updated successfully", data: updated };
+  },
+
+  // Advertiser opt-in: run this campaign on the MCP bidder too. Super admin
+  // then writes the MCP text ad (from the campaign's existing creative and
+  // CTA), sets bid/targeting and approves it in MCP Review.
+  setMcpEnabled: async ({ id, data, reqBy }) => {
+    const set = { mcpEnabled: data.enabled };
+    if (data.enabled) set.mcpRequestedAt = new Date();
+
+    let updated = await campaignModel.findOneAndUpdate(
+      { _id: id, orgId: reqBy.org_id, status: { $ne: STATUS.DELETED } },
+      { $set: set },
+      { new: true }
+    );
+    if (isUndefinedOrNull(updated)) {
+      throw new Error("Invalid campaign id " + id);
+    }
+    // First opt-in: queue it for review.
+    if (data.enabled && isUndefinedOrNull(updated.mcp?.reviewStatus)) {
+      updated = await campaignModel.findOneAndUpdate(
+        { _id: id },
+        { $set: { "mcp.reviewStatus": CAMPAIGN_REVIEW_STATUS.PENDING } },
+        { new: true }
+      );
+    }
+    await notifyMcpChanged("campaign", updated._id);
+    return {
+      message: data.enabled
+        ? "MCP enabled. Our team will review and set it live."
+        : "MCP disabled for this campaign.",
+      data: { id: updated._id, mcpEnabled: updated.mcpEnabled, mcp: updated.mcp },
+    };
   },
 
   // soft delete: marks the campaign as deleted within the requester's org
