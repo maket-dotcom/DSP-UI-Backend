@@ -78,7 +78,9 @@ const mcpReviewService = {
   listCampaigns: async ({ data }) => {
     const { page, limit, reviewStatus } = data;
     const query = { mcpEnabled: true, status: { $ne: CAMPAIGN_STATUS.DELETED } };
-    if (reviewStatus === CAMPAIGN_REVIEW_STATUS.PENDING) {
+    if (reviewStatus === "all") {
+      // every opted-in campaign
+    } else if (reviewStatus === CAMPAIGN_REVIEW_STATUS.PENDING) {
       query.$or = [{ "mcp.reviewStatus": reviewStatus }, { "mcp.reviewStatus": { $exists: false } }];
     } else {
       query["mcp.reviewStatus"] = reviewStatus;

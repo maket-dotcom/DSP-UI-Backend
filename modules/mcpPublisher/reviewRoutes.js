@@ -67,7 +67,7 @@ router.post("/servers/:id/decision", execute(controller.reviewDecideServer));
  * @swagger
  * /api/v1/mcp-review/campaigns:
  *   get:
- *     summary: List campaigns opted in to MCP by review status (defaults to pending), with a suggested ad
+ *     summary: List campaigns opted in to MCP by review status (all|pending|approved|rejected; default all), with a suggested ad
  *     tags: [MCP Review]
  *     security: [ { bearerAuth: [] } ]
  *     parameters: [ { in: query, name: reviewStatus, schema: { type: string, enum: [pending, approved, rejected] } } ]

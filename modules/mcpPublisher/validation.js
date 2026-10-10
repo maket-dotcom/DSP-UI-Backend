@@ -94,8 +94,8 @@ const reviewListCampaigns = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   reviewStatus: Joi.string()
-    .valid(...Object.values(CAMPAIGN_REVIEW_STATUS))
-    .default(CAMPAIGN_REVIEW_STATUS.PENDING),
+    .valid("all", ...Object.values(CAMPAIGN_REVIEW_STATUS))
+    .default("all"),
 });
 
 const reviewCampaignDecision = Joi.object({
