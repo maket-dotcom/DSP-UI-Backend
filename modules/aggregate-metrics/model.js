@@ -6,7 +6,9 @@ mongoose.Promise = global.Promise;
 var aggregateMetricsSchema = new mongoose.Schema(
     {
         orgId: String,
+        advertiserId: String, // set by the bid-engine aggregator from the campaign
         campaignId: String,
+        lineItemId: String, // line item that delivered; empty on rows from before line items
         creativeId: String, // which creative served (from the bid-engine CSVs)
         pubId: String, // publisher zone
         country: String, // geo (request device country)

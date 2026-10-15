@@ -25,6 +25,12 @@ module.exports = {
     COMPLETED_VIEWS: 'completed_views',
   },
 
+  // What the campaign budget (and its line items' budgets) count.
+  BUDGET_TYPE: {
+    SPEND: "spend",
+    IMPRESSIONS: "impressions",
+  },
+
   AUDIENCE_TARGET: {
     ALL: 'all',
     CUSTOM: 'custom',
@@ -53,11 +59,12 @@ module.exports = {
 
   DATA_MAPPING: {
     title: "Title",
+    advertiserName: "Advertiser",
     status: "Status",
     goal: "Goal",
     budget: "Budget",
     dailyBudget: "Daily Budget",
-    geo: "Geo",
+    lineItems: "Line Items", // geo now lives on line items
     mcpEnabled: "MCP",
   }
 

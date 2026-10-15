@@ -18,7 +18,9 @@ module.exports = {
   // (region/city/hour are intentionally NOT supported — the daily rollup carries
   //  no sub-country geo and no timestamp.)
   DIMENSION: {
+    ADVERTISER: "advertiser",
     CAMPAIGN: "campaign",
+    LINE_ITEM: "lineItem",
     PUBLISHER: "publisher",
     COUNTRY: "country",
     BUNDLE: "bundle", // app.bundle (app) / site.domain (web) — the supply source
@@ -30,7 +32,9 @@ module.exports = {
   // separate so the org-scoped report can't group by "org" (meaningless there).
   SUPER_DIMENSION: {
     ORG: "org",
+    ADVERTISER: "advertiser",
     CAMPAIGN: "campaign",
+    LINE_ITEM: "lineItem",
     PUBLISHER: "publisher",
     COUNTRY: "country",
     BUNDLE: "bundle",

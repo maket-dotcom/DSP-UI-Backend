@@ -94,11 +94,16 @@ const mcpReviewService = {
     const orgIds = [...new Set(rows.map((c) => c.orgId).filter(Boolean))];
     const orgs = await organizationModel.find({ _id: { $in: orgIds } }, { name: 1 });
     const orgName = Object.fromEntries(orgs.map((o) => [String(o._id), o.name]));
+    const lineItemImage = await imagesFromLineItems(rows.map((c) => String(c._id)));
 
     return {
       data: rows.map((c) => {
         const doc = c.toObject();
-        return { ...doc, orgName: orgName[c.orgId] || null, suggestedMcp: suggestMcp(doc, orgName[c.orgId]) };
+        return {
+          ...doc,
+          orgName: orgName[c.orgId] || null,
+          suggestedMcp: suggestMcp(doc, orgName[c.orgId], lineItemImage[String(c._id)]),
+        };
       }),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 },
     };
@@ -171,9 +176,36 @@ const mcpReviewService = {
   },
 };
 
+// First image creative attached to each campaign's line items. Campaigns
+// set up with line items keep their creatives there, not in campaign.media.
+const imagesFromLineItems = async (campaignIds) => {
+  if (!campaignIds.length) return {};
+  const lineItemModel = require("../lineItem/model");
+  const creativeModel = require("../creative/model");
+  const lis = await lineItemModel
+    .find({ campaignId: { $in: campaignIds }, status: { $ne: "deleted" } })
+    .select({ campaignId: 1, creatives: 1 })
+    .lean();
+  const ids = [...new Set(lis.flatMap((li) => (li.creatives || []).map((c) => c.creativeId)))];
+  if (!ids.length) return {};
+  const crs = await creativeModel
+    .find({ _id: { $in: ids }, type: { $ne: "video" }, status: { $ne: "deleted" }, link: { $ne: null } })
+    .select({ link: 1 })
+    .lean();
+  const link = Object.fromEntries(crs.map((c) => [String(c._id), c.link]));
+  const out = {};
+  for (const li of lis) {
+    if (out[li.campaignId]) continue;
+    const hit = (li.creatives || []).map((c) => link[c.creativeId]).find(Boolean);
+    if (hit) out[li.campaignId] = hit;
+  }
+  return out;
+};
+
 // Prefill for the review dialog, from what the advertiser already uploaded.
-const suggestMcp = (c, orgName) => {
-  const image = (c.media || []).find((m) => m.type !== "video" && m.link);
+const suggestMcp = (c, orgName, lineItemImage) => {
+  const legacy = (c.media || []).find((m) => m.type !== "video" && m.link);
+  const image = legacy || (lineItemImage ? { link: lineItemImage } : null);
   const isApp = c.type === CAMPAIGN_TYPE.MOBILE;
   const destination = c.mcp?.creative?.destinationUrl || c.ctaUrl || "";
   return {

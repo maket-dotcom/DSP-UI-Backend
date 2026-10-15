@@ -98,6 +98,9 @@ const mcpSchema = new Schema(
 var campaignSchema = new mongoose.Schema(
   {
     orgId: String,
+    // Advertiser that owns this campaign (Organization → Advertiser → Campaign
+    // → Line Item). Missing only on campaigns created before advertisers.
+    advertiserId: { type: String, default: null },
 
     title: String,
     goal: String,
@@ -116,6 +119,9 @@ var campaignSchema = new mongoose.Schema(
     appIconLink: String,
     budget: String,
     dailyBudget: String,
+    budgetType: { type: String, default: "spend" }, // spend | impressions
+    alternativeId: { type: String, default: null },
+    notes: { type: String, default: null },
     kpi: String,
     isScheduling: Boolean,
     startDate: Date,
@@ -127,6 +133,9 @@ var campaignSchema = new mongoose.Schema(
     eventDetails: [eventDetailsSchema],
 
 
+    // ---- Targeting + media below now live on LINE ITEMS (lineitemmodels /
+    // creativemodels). Kept here only for campaigns not yet migrated: the bid
+    // engine bids those through a synthetic line item built from these fields.
     geo: [String], // geo locations
     isCustomTargating: Boolean,
     customTargating: [customTargating],
@@ -150,6 +159,8 @@ var campaignSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+campaignSchema.index({ orgId: 1, advertiserId: 1, status: 1 });
+
 module.exports =
   mongoose.models.campaignModel ||
   mongoose.model("campaignModel", campaignSchema);

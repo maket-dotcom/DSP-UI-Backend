@@ -28,6 +28,9 @@ const getReport = Joi.object({
     .unique()
     .default(DEFAULT_COLUMNS),
 
+  // Filter > Advertiser.
+  advertiserId: Joi.string().trim().allow("").optional(),
+
   // Filter > Campaign (single or multiple).
   campaignId: Joi.string().trim().optional(),
   campaignIds: Joi.array().items(Joi.string().trim()).optional(),

@@ -1,53 +1,26 @@
-const path = require("path");
-const { v4: uuidv4 } = require("uuid");
 const campaignModel = require("./model");
 const { isUndefinedOrNull } = require("../../utils/validators");
 const { appStore } = require("../../utils/appStore");
-const { gcs } = require("../../utils/gcs");
+const { uploadAppIcon } = require("../../utils/appIcon");
 const { STATUS, TYPE, DATA_MAPPING } = require("./constant");
 const { notifyMcpChanged } = require("../mcpPublisher/notify");
 const { CAMPAIGN_REVIEW_STATUS } = require("../mcpPublisher/constant");
 require("dotenv").config();
+
+// Lazily required: advertiser / lineItem modules require the campaign model.
+const advertiserService = () => require("../advertiser/service");
+const advertiserModel = () => require("../advertiser/model");
+const lineItemService = () => require("../lineItem/service");
 
 // Tell the MCP bidder when an opted-in campaign changes (status, budget, …).
 const notifyIfMcp = async (campaign) => {
   if (campaign?.mcpEnabled) await notifyMcpChanged("campaign", campaign._id);
 };
 
-// True when the URL already points at our own GCS bucket (public or signed).
-// Such URLs are already stored by us, so we must NOT try to re-download them
-// (re-fetching our own signed/expiring URL fails with a 400).
-const isOurBucketUrl = (url) =>
-  typeof url === "string" && url.includes("storage.googleapis.com");
-
-// Download an external app-icon URL and store it in our GCS bucket,
-// returning our bucket URL (never the external one). If the URL is already
-// our bucket URL (e.g. on edit/update), it is returned unchanged.
-const uploadAppIcon = async ({ url, orgId }) => {
-  if (isOurBucketUrl(url)) {
-    return url;
-  }
-
-  let ext = "";
-  try {
-    ext = path.extname(new URL(url).pathname);
-  } catch (e) {
-    ext = "";
-  }
-  if (isUndefinedOrNull(ext) || ext === "") ext = ".png";
-
-  const destinationPath = `campaign/org_${orgId}/app_icons/${uuidv4()}${ext}`;
-  const { url: bucketUrl } = await gcs.uploadFromUrl({
-    url,
-    destinationPath,
-    publicUrl: true, // store a permanent public URL in the DB (never expires)
-  });
-  return bucketUrl;
-};
-
 const campaignService = {
 
   addCampaign: async ({ data, reqBy }) => {
+    await advertiserService().assertUsable({ id: data.advertiserId, orgId: reqBy.org_id });
     const payload = { ...data, orgId: reqBy.org_id };
 
     // Mobile campaigns: pull the provided app icon into our bucket and persist
@@ -73,11 +46,12 @@ const campaignService = {
 
   // list campaigns within the requester's org (paginated, excludes soft-deleted)
   listCampaigns: async ({ data, reqBy }) => {
-    const { page, limit, type, status, search } = data;
+    const { page, limit, type, status, search, advertiserId } = data;
 
     const query = { orgId: reqBy.org_id };
     query.status = isUndefinedOrNull(status) ? { $ne: STATUS.DELETED } : status;
     if (!isUndefinedOrNull(type)) query.type = type;
+    if (!isUndefinedOrNull(advertiserId)) query.advertiserId = advertiserId;
     if (!isUndefinedOrNull(search)) {
       const rx = new RegExp(search, "i");
       query.$or = [{ title: rx }, { bundleId: rx }];
@@ -85,13 +59,30 @@ const campaignService = {
 
     const skip = (page - 1) * limit;
     const [campaigns, total] = await Promise.all([
-      campaignModel.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      campaignModel.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       campaignModel.countDocuments(query),
     ]);
 
+    // Advertiser name + line item counts for each row.
+    const advIds = [...new Set(campaigns.map((c) => c.advertiserId).filter(Boolean))];
+    const [advs, liCounts] = await Promise.all([
+      advIds.length
+        ? advertiserModel().find({ _id: { $in: advIds }, orgId: reqBy.org_id }).select({ name: 1 }).lean()
+        : [],
+      lineItemService().countsByCampaign({
+        orgId: reqBy.org_id,
+        campaignIds: campaigns.map((c) => String(c._id)),
+      }),
+    ]);
+    const advName = Object.fromEntries(advs.map((a) => [String(a._id), a.name]));
+
     return {
       dataMapping: DATA_MAPPING,
-      data: campaigns,
+      data: campaigns.map((c) => ({
+        ...c,
+        advertiserName: advName[c.advertiserId] || null,
+        lineItems: liCounts[String(c._id)] || { total: 0, active: 0 },
+      })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   },
@@ -119,15 +110,27 @@ const campaignService = {
   },
 
   getCampaign: async ({ id, reqBy }) => {
-    const campaign = await campaignModel.findOne({ _id: id, orgId: reqBy.org_id });
+    const campaign = await campaignModel.findOne({ _id: id, orgId: reqBy.org_id }).lean();
     if (isUndefinedOrNull(campaign)) {
       throw new Error("Invalid campaign id " + id);
     }
-    return { data: campaign };
+    // Advertiser summary for breadcrumbs / the campaign page header.
+    let advertiser = null;
+    if (campaign.advertiserId) {
+      const a = await advertiserModel()
+        .findOne({ _id: campaign.advertiserId, orgId: reqBy.org_id })
+        .select({ name: 1, status: 1, category: 1 })
+        .lean();
+      if (a) advertiser = { id: String(a._id), name: a.name, status: a.status, category: a.category };
+    }
+    return { data: { ...campaign, advertiser } };
   },
 
   updateCampaign: async ({ id, data, reqBy }) => {
     const payload = { ...data };
+    if (!isUndefinedOrNull(payload.advertiserId)) {
+      await advertiserService().assertUsable({ id: payload.advertiserId, orgId: reqBy.org_id });
+    }
 
     // If a new app icon URL is supplied, download it into our bucket and store
     // our bucket URL instead.

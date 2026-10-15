@@ -2,23 +2,10 @@ const Joi = require("joi");
 const {
   STATUS,
   TYPE,
-  AUDIENCE_TARGET,
-  INVENTORY_TYPE,
+  BUDGET_TYPE,
   MMP,
   APP_PLATFORM,
 } = require("./constant");
-
-const mediaItem = Joi.object({
-  id: Joi.string().trim().optional().allow(null),
-  link: Joi.string().trim().optional().allow("", null),
-  type: Joi.string().trim().optional().allow(null),
-  w: Joi.number().optional().allow(null),
-  h: Joi.number().optional().allow(null),
-  // Video / CTV creative fields.
-  duration: Joi.number().optional().allow(null),
-  vastTag: Joi.string().trim().optional().allow("", null),
-  mime: Joi.string().trim().optional().allow("", null),
-});
 
 const eventItem = Joi.object({
   name: Joi.string().trim().required(),
@@ -26,15 +13,16 @@ const eventItem = Joi.object({
   currency: Joi.string().trim().optional(),
 });
 
-const targetItem = Joi.object({
-  country: Joi.string().trim().optional(),
-  state: Joi.string().trim().optional(),
-  city: Joi.string().trim().optional(),
-});
-
 const addCampaign = Joi.object({
+  advertiserId: Joi.string().trim().pattern(/^[a-fA-F0-9]{24}$/).required().messages({
+    "any.required": "Pick an advertiser for this campaign",
+    "string.pattern.base": "advertiserId must be a valid id",
+  }),
   title: Joi.string().trim().required(),
   type: Joi.string().valid(...Object.values(TYPE)).required(),
+  budgetType: Joi.string().valid(...Object.values(BUDGET_TYPE)).default(BUDGET_TYPE.SPEND),
+  alternativeId: Joi.string().trim().allow("", null).optional(),
+  notes: Joi.string().trim().max(2000).allow("", null).optional(),
   goal: Joi.string().trim().optional(),
   status: Joi.string()
     .valid(STATUS.ACTIVE, STATUS.PAUSED)
@@ -77,25 +65,16 @@ const addCampaign = Joi.object({
   vtaUrl: Joi.string().trim().optional().allow(""),
   eventDetails: Joi.array().items(eventItem).optional(),
 
-  geo: Joi.array().items(Joi.string().trim()).optional(),
-  isCustomTargating: Joi.boolean().optional(),
-  customTargating: Joi.array().items(targetItem).optional(),
-
-  audienceTarget: Joi.string()
-    .valid(...Object.values(AUDIENCE_TARGET))
-    .optional(),
-  customAudienceIds: Joi.array().items(Joi.string().trim()).optional(),
-
-  inventoryType: Joi.string()
-    .valid(...Object.values(INVENTORY_TYPE))
-    .optional(),
-  oemPremiumPartners: Joi.array().items(Joi.string().trim()).optional(),
-
-
-  media: Joi.array().items(mediaItem).optional(),
+  // Targeting and media moved to line items (modules/lineItem, modules/creative).
 });
 
 const updateCampaign = Joi.object({
+  advertiserId: Joi.string().trim().pattern(/^[a-fA-F0-9]{24}$/).optional().messages({
+    "string.pattern.base": "advertiserId must be a valid id",
+  }),
+  budgetType: Joi.string().valid(...Object.values(BUDGET_TYPE)).optional(),
+  alternativeId: Joi.string().trim().allow("", null).optional(),
+  notes: Joi.string().trim().max(2000).allow("", null).optional(),
   title: Joi.string().trim().optional(),
   type: Joi.string().valid(...Object.values(TYPE)).optional(),
   goal: Joi.string().trim().optional(),
@@ -126,22 +105,7 @@ const updateCampaign = Joi.object({
   vtaUrl: Joi.string().trim().optional().allow(""),
   eventDetails: Joi.array().items(eventItem).optional(),
 
-  geo: Joi.array().items(Joi.string().trim()).optional(),
-  isCustomTargating: Joi.boolean().optional(),
-  customTargating: Joi.array().items(targetItem).optional(),
-
-  audienceTarget: Joi.string()
-    .valid(...Object.values(AUDIENCE_TARGET))
-    .optional(),
-  customAudienceIds: Joi.array().items(Joi.string().trim()).optional(),
-
-  inventoryType: Joi.string()
-    .valid(...Object.values(INVENTORY_TYPE))
-    .optional(),
-  oemPremiumPartners: Joi.array().items(Joi.string().trim()).optional(),
-
-
-  media: Joi.array().items(mediaItem).optional(),
+  // Targeting and media moved to line items (modules/lineItem, modules/creative).
 }).min(1);
 
 // advertiser opt-in to the MCP bidder
@@ -164,6 +128,7 @@ const appLookup = Joi.object({
 });
 
 const listCampaign = Joi.object({
+  advertiserId: Joi.string().trim().pattern(/^[a-fA-F0-9]{24}$/).optional(),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   type: Joi.string().valid(...Object.values(TYPE)).optional(),

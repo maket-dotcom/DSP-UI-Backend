@@ -85,6 +85,10 @@ const dimensionExpr = (dim) => {
   switch (dim) {
     case DIMENSION.CAMPAIGN:
       return "$campaignId";
+    case DIMENSION.ADVERTISER:
+      return { $ifNull: ["$advertiserId", ""] };
+    case DIMENSION.LINE_ITEM:
+      return { $ifNull: ["$lineItemId", ""] };
     case DIMENSION.PUBLISHER:
       return "$pubId";
     case DIMENSION.COUNTRY:
@@ -246,6 +250,37 @@ const enrichCampaignTitles = async (rows) => {
   });
 };
 
+// Add advertiser names to rows grouped by advertiser (advertiserId → name).
+const enrichAdvertiserNames = async (rows) => {
+  const advertiserModel = require("../advertiser/model");
+  const ids = rows.map((r) => r[DIMENSION.ADVERTISER]).filter(isObjectId);
+  const advs = ids.length
+    ? await advertiserModel.find({ _id: { $in: ids } }).select({ name: 1 }).lean()
+    : [];
+  const map = Object.fromEntries(advs.map((a) => [String(a._id), a.name]));
+  rows.forEach((r) => {
+    const id = r[DIMENSION.ADVERTISER];
+    r.advertiserName = map[id] || (id ? null : "No advertiser");
+  });
+};
+
+// Add line item names to rows grouped by line item. Delivery from before line
+// items existed has no lineItemId and is labelled as such.
+const enrichLineItemNames = async (rows) => {
+  const lineItemModel = require("../lineItem/model");
+  const ids = rows.map((r) => r[DIMENSION.LINE_ITEM]).filter(isObjectId);
+  const lis = ids.length
+    ? await lineItemModel.find({ _id: { $in: ids } }).select({ name: 1, format: 1 }).lean()
+    : [];
+  const map = Object.fromEntries(lis.map((l) => [String(l._id), l]));
+  rows.forEach((r) => {
+    const id = r[DIMENSION.LINE_ITEM];
+    const li = map[id];
+    r.lineItemName = li ? li.name : id ? null : "Before line items";
+    r.lineItemFormat = li ? li.format : null;
+  });
+};
+
 // Add organisation name/subdomain to rows grouped by org (orgId → name).
 const enrichOrgNames = async (rows) => {
   const ids = rows.map((r) => r[SUPER_DIMENSION.ORG]).filter(isObjectId);
@@ -301,6 +336,9 @@ const reportService = {
     } else if (!isUndefinedOrNull(data.campaignId)) {
       match.campaignId = data.campaignId;
     }
+    if (!isUndefinedOrNull(data.advertiserId) && data.advertiserId !== "") {
+      match.advertiserId = data.advertiserId;
+    }
     if (!isUndefinedOrNull(data.search) && data.search !== "") {
       const rx = new RegExp(data.search, "i");
       match.$or = [{ campaignId: rx }, { pubId: rx }, { country: rx }, { bundleId: rx }];
@@ -308,6 +346,8 @@ const reportService = {
 
     const result = await aggregateGrouped({ match, groupBy, sortBy, sortOrder, page, limit });
     if (groupBy.includes(DIMENSION.CAMPAIGN)) await enrichCampaignTitles(result.rows);
+    if (groupBy.includes(DIMENSION.ADVERTISER)) await enrichAdvertiserNames(result.rows);
+    if (groupBy.includes(DIMENSION.LINE_ITEM)) await enrichLineItemNames(result.rows);
 
     return buildResponse(data, range, groupBy, columns, sortBy, sortOrder, page, limit, result);
   },
@@ -340,6 +380,8 @@ const reportService = {
 
     const result = await aggregateGrouped({ match, groupBy, sortBy, sortOrder, page, limit });
     if (groupBy.includes(DIMENSION.CAMPAIGN)) await enrichCampaignTitles(result.rows);
+    if (groupBy.includes(DIMENSION.ADVERTISER)) await enrichAdvertiserNames(result.rows);
+    if (groupBy.includes(DIMENSION.LINE_ITEM)) await enrichLineItemNames(result.rows);
     if (groupBy.includes(SUPER_DIMENSION.ORG)) await enrichOrgNames(result.rows);
 
     return buildResponse(data, range, groupBy, columns, sortBy, sortOrder, page, limit, result);
