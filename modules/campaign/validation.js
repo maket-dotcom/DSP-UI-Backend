@@ -5,7 +5,19 @@ const {
   BUDGET_TYPE,
   MMP,
   APP_PLATFORM,
+  FREQ_UNIT,
 } = require("./constant");
+
+// "count impressions every <every> <unit>" per user.
+const frequencyCaps = Joi.array()
+  .items(
+    Joi.object({
+      count: Joi.number().integer().min(1).max(1000).required(),
+      every: Joi.number().integer().min(1).max(365).required(),
+      unit: Joi.string().valid(...Object.values(FREQ_UNIT)).required(),
+    })
+  )
+  .max(5);
 
 const eventItem = Joi.object({
   name: Joi.string().trim().required(),
@@ -21,6 +33,7 @@ const addCampaign = Joi.object({
   title: Joi.string().trim().required(),
   type: Joi.string().valid(...Object.values(TYPE)).required(),
   budgetType: Joi.string().valid(...Object.values(BUDGET_TYPE)).default(BUDGET_TYPE.SPEND),
+  frequencyCaps: frequencyCaps.default([]),
   alternativeId: Joi.string().trim().allow("", null).optional(),
   notes: Joi.string().trim().max(2000).allow("", null).optional(),
   goal: Joi.string().trim().optional(),
@@ -73,6 +86,7 @@ const updateCampaign = Joi.object({
     "string.pattern.base": "advertiserId must be a valid id",
   }),
   budgetType: Joi.string().valid(...Object.values(BUDGET_TYPE)).optional(),
+  frequencyCaps: frequencyCaps.optional(),
   alternativeId: Joi.string().trim().allow("", null).optional(),
   notes: Joi.string().trim().max(2000).allow("", null).optional(),
   title: Joi.string().trim().optional(),

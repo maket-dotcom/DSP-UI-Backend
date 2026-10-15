@@ -8,6 +8,7 @@ const lineItemController = {
     return lineItemService.list({ data, reqBy: req.user });
   },
   get: async (req) => lineItemService.getById({ id: req.params.id, reqBy: req.user }),
+  targetingOptions: async (req) => lineItemService.targetingOptions({ reqBy: req.user }),
   create: async (req) => {
     const data = validateInfo(validate.create, req.body);
     return lineItemService.create({ data, reqBy: req.user });

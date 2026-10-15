@@ -31,6 +31,13 @@ module.exports = {
     IMPRESSIONS: "impressions",
   },
 
+  // Frequency cap window units: "3 impressions every 1 day per user".
+  FREQ_UNIT: {
+    HOUR: "hour",
+    DAY: "day",
+    WEEK: "week",
+  },
+
   AUDIENCE_TARGET: {
     ALL: 'all',
     CUSTOM: 'custom',

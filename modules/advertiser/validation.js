@@ -7,6 +7,9 @@ const defaults = Joi.object({
   currency: Joi.string().trim().uppercase().default("USD"),
   clickUrl: Joi.string().trim().allow("", null).optional(),
   mmpPlatform: Joi.string().valid(...Object.values(MMP)).allow(null).optional(),
+  campaignPresetId: Joi.string().trim().pattern(/^[a-fA-F0-9]{24}$/).allow(null, "").optional(),
+  lineItemPresetId: Joi.string().trim().pattern(/^[a-fA-F0-9]{24}$/).allow(null, "").optional(),
+  targetingPresetId: Joi.string().trim().pattern(/^[a-fA-F0-9]{24}$/).allow(null, "").optional(),
 });
 
 const fields = {

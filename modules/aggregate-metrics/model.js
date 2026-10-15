@@ -9,6 +9,7 @@ var aggregateMetricsSchema = new mongoose.Schema(
         advertiserId: String, // set by the bid-engine aggregator from the campaign
         campaignId: String,
         lineItemId: String, // line item that delivered; empty on rows from before line items
+        dealId: String, // PMP deal the delivery was bought on; empty = open auction
         creativeId: String, // which creative served (from the bid-engine CSVs)
         pubId: String, // publisher zone
         country: String, // geo (request device country)

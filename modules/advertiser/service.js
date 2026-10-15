@@ -3,6 +3,17 @@ const campaignModel = require("../campaign/model");
 const { STATUS, CATEGORY } = require("./constant");
 const { isUndefinedOrNull } = require("../../utils/validators");
 const { uploadAppIcon } = require("../../utils/appIcon");
+const presetService = require("../preset/service");
+
+// "" from a cleared select means "no default preset".
+const cleanDefaults = (payload) => {
+  if (payload.defaults) {
+    for (const k of ["campaignPresetId", "lineItemPresetId", "targetingPresetId"]) {
+      if (payload.defaults[k] === "") payload.defaults[k] = null;
+    }
+  }
+  return payload;
+};
 
 const isObjectId = (v) => typeof v === "string" && /^[a-fA-F0-9]{24}$/.test(v);
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -42,7 +53,7 @@ const advertiserService = {
     }
     const skip = (page - 1) * limit;
     const [rows, total] = await Promise.all([
-      advertiserModel.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      advertiserModel.find(query).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).lean(),
       advertiserModel.countDocuments(query),
     ]);
     const counts = await campaignCounts(reqBy.org_id, rows.map((r) => String(r._id)));
@@ -76,7 +87,8 @@ const advertiserService = {
   },
 
   create: async ({ data, reqBy }) => {
-    const payload = await withBucketIcon({ ...data }, reqBy.org_id);
+    const payload = cleanDefaults(await withBucketIcon({ ...data }, reqBy.org_id));
+    await presetService.assertDefaults({ defaults: payload.defaults, advertiserId: null, orgId: reqBy.org_id });
     const saved = await new advertiserModel({
       ...payload,
       orgId: reqBy.org_id,
@@ -88,7 +100,8 @@ const advertiserService = {
 
   update: async ({ id, data, reqBy }) => {
     if (!isObjectId(id)) throw new Error("Invalid advertiser id");
-    const payload = await withBucketIcon({ ...data }, reqBy.org_id);
+    const payload = cleanDefaults(await withBucketIcon({ ...data }, reqBy.org_id));
+    await presetService.assertDefaults({ defaults: payload.defaults, advertiserId: id, orgId: reqBy.org_id });
     const updated = await advertiserModel.findOneAndUpdate(
       { _id: id, orgId: reqBy.org_id, status: notDeleted },
       { $set: { ...payload, updatedBy: reqBy.user_id || null } },
@@ -107,7 +120,13 @@ const advertiserService = {
       { new: true }
     );
     if (isUndefinedOrNull(updated)) throw new Error(`No advertiser exists with id: ${id}`);
-    return { message: `Advertiser ${status}.`, data: { id: updated._id, status } };
+    const live = await campaignModel.countDocuments({ orgId: reqBy.org_id, advertiserId: id, status: STATUS.ACTIVE });
+    const n = `${live} active campaign${live === 1 ? "" : "s"}`;
+    const message =
+      status === STATUS.ACTIVE
+        ? `${updated.name} activated${live ? `: its ${n} can bid again` : ""}.`
+        : `${updated.name} paused${live ? `: its ${n} stop bidding` : ""}.`;
+    return { message, data: { id: updated._id, status } };
   },
 
   // Soft delete. Refused while the advertiser still has campaigns, so no

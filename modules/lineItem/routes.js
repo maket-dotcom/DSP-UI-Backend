@@ -34,6 +34,18 @@ router.get("/list", auth, allowed, can(ACTIONS.VIEW), execute(lineItemController
 
 /**
  * @swagger
+ * /api/v1/line-item/targeting-options:
+ *   get:
+ *     summary: Choices for the targeting pickers (supply partners + zones, campaigns for
+ *       retargeting, device types)
+ *     tags: [LineItem]
+ *     security: [ { bearerAuth: [] } ]
+ *     responses: { 200: { description: Options } }
+ */
+router.get("/targeting-options", auth, allowed, can(ACTIONS.VIEW), execute(lineItemController.targetingOptions));
+
+/**
+ * @swagger
  * /api/v1/line-item/get/{id}:
  *   get:
  *     summary: Get one line item

@@ -120,6 +120,13 @@ var campaignSchema = new mongoose.Schema(
     budget: String,
     dailyBudget: String,
     budgetType: { type: String, default: "spend" }, // spend | impressions
+    // Per-user impression caps across all the campaign's line items,
+    // e.g. [{ count: 3, every: 1, unit: "day" }]. The stricter of these and a
+    // line item's own caps wins.
+    frequencyCaps: {
+      type: [{ _id: false, count: Number, every: Number, unit: String }],
+      default: [],
+    },
     alternativeId: { type: String, default: null },
     notes: { type: String, default: null },
     kpi: String,

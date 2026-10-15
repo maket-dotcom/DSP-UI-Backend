@@ -59,7 +59,7 @@ const campaignService = {
 
     const skip = (page - 1) * limit;
     const [campaigns, total] = await Promise.all([
-      campaignModel.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      campaignModel.find(query).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).lean(),
       campaignModel.countDocuments(query),
     ]);
 
@@ -93,7 +93,7 @@ const campaignService = {
     const campaigns = await campaignModel
       .find({ orgId: reqBy.org_id, status: { $ne: STATUS.DELETED } })
       .select({ title: 1 })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1, _id: -1 });
 
     return campaigns.map((c) => ({ id: c._id, value: c.title }));
   },

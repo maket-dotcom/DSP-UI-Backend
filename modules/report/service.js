@@ -89,6 +89,8 @@ const dimensionExpr = (dim) => {
       return { $ifNull: ["$advertiserId", ""] };
     case DIMENSION.LINE_ITEM:
       return { $ifNull: ["$lineItemId", ""] };
+    case DIMENSION.DEAL:
+      return { $ifNull: ["$dealId", ""] };
     case DIMENSION.PUBLISHER:
       return "$pubId";
     case DIMENSION.COUNTRY:
@@ -281,6 +283,33 @@ const enrichLineItemNames = async (rows) => {
   });
 };
 
+// Add deal names to rows grouped by deal, from the PMP deals set up on supply
+// partners. Delivery without a deal is the open auction; a deal id that isn't
+// set up anywhere (typed onto a line item by hand) keeps just its id.
+const enrichDealNames = async (rows) => {
+  const supplyPartnerModel = require("../supply/model");
+  const ids = [...new Set(rows.map((r) => r[DIMENSION.DEAL]).filter(Boolean))];
+  const partners = ids.length
+    ? await supplyPartnerModel
+        .find({ "deals.dealId": { $in: ids } })
+        .select({ name: 1, "deals.dealId": 1, "deals.name": 1, "deals.type": 1 })
+        .lean()
+    : [];
+  const map = {};
+  partners.forEach((p) =>
+    (p.deals || []).forEach((d) => {
+      if (ids.includes(d.dealId)) map[d.dealId] = { name: d.name || null, type: d.type || null, partner: p.name };
+    })
+  );
+  rows.forEach((r) => {
+    const id = r[DIMENSION.DEAL];
+    const d = map[id];
+    r.dealName = id ? (d && d.name) || null : "Open auction";
+    r.dealPartner = d ? d.partner : null;
+    r.dealType = d ? d.type : null;
+  });
+};
+
 // Add organisation name/subdomain to rows grouped by org (orgId → name).
 const enrichOrgNames = async (rows) => {
   const ids = rows.map((r) => r[SUPER_DIMENSION.ORG]).filter(isObjectId);
@@ -339,15 +368,20 @@ const reportService = {
     if (!isUndefinedOrNull(data.advertiserId) && data.advertiserId !== "") {
       match.advertiserId = data.advertiserId;
     }
+    if (!isUndefinedOrNull(data.dealId)) {
+      // "" = open-auction delivery only (rows written before deals have no dealId).
+      match.dealId = data.dealId === "" ? { $in: ["", null] } : data.dealId;
+    }
     if (!isUndefinedOrNull(data.search) && data.search !== "") {
       const rx = new RegExp(data.search, "i");
-      match.$or = [{ campaignId: rx }, { pubId: rx }, { country: rx }, { bundleId: rx }];
+      match.$or = [{ campaignId: rx }, { pubId: rx }, { country: rx }, { bundleId: rx }, { dealId: rx }];
     }
 
     const result = await aggregateGrouped({ match, groupBy, sortBy, sortOrder, page, limit });
     if (groupBy.includes(DIMENSION.CAMPAIGN)) await enrichCampaignTitles(result.rows);
     if (groupBy.includes(DIMENSION.ADVERTISER)) await enrichAdvertiserNames(result.rows);
     if (groupBy.includes(DIMENSION.LINE_ITEM)) await enrichLineItemNames(result.rows);
+    if (groupBy.includes(DIMENSION.DEAL)) await enrichDealNames(result.rows);
 
     return buildResponse(data, range, groupBy, columns, sortBy, sortOrder, page, limit, result);
   },
@@ -367,6 +401,9 @@ const reportService = {
       match.campaignId = data.campaignId;
     }
     if (!isUndefinedOrNull(data.bundle) && data.bundle !== "") match.bundleId = data.bundle;
+    if (!isUndefinedOrNull(data.dealId)) {
+      match.dealId = data.dealId === "" ? { $in: ["", null] } : data.dealId;
+    }
     if (!isUndefinedOrNull(data.search) && data.search !== "") {
       const rx = new RegExp(data.search, "i");
       match.$or = [
@@ -374,6 +411,7 @@ const reportService = {
         { pubId: rx },
         { country: rx },
         { bundleId: rx },
+        { dealId: rx },
         { orgId: rx },
       ];
     }
@@ -382,6 +420,7 @@ const reportService = {
     if (groupBy.includes(DIMENSION.CAMPAIGN)) await enrichCampaignTitles(result.rows);
     if (groupBy.includes(DIMENSION.ADVERTISER)) await enrichAdvertiserNames(result.rows);
     if (groupBy.includes(DIMENSION.LINE_ITEM)) await enrichLineItemNames(result.rows);
+    if (groupBy.includes(DIMENSION.DEAL)) await enrichDealNames(result.rows);
     if (groupBy.includes(SUPER_DIMENSION.ORG)) await enrichOrgNames(result.rows);
 
     return buildResponse(data, range, groupBy, columns, sortBy, sortOrder, page, limit, result);

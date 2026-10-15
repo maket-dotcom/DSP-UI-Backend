@@ -21,6 +21,7 @@ module.exports = {
     ADVERTISER: "advertiser",
     CAMPAIGN: "campaign",
     LINE_ITEM: "lineItem",
+    DEAL: "deal", // PMP deal id; "" = open auction
     PUBLISHER: "publisher",
     COUNTRY: "country",
     BUNDLE: "bundle", // app.bundle (app) / site.domain (web) — the supply source
@@ -35,6 +36,7 @@ module.exports = {
     ADVERTISER: "advertiser",
     CAMPAIGN: "campaign",
     LINE_ITEM: "lineItem",
+    DEAL: "deal",
     PUBLISHER: "publisher",
     COUNTRY: "country",
     BUNDLE: "bundle",

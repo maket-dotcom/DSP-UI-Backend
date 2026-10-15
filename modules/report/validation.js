@@ -35,6 +35,9 @@ const getReport = Joi.object({
   campaignId: Joi.string().trim().optional(),
   campaignIds: Joi.array().items(Joi.string().trim()).optional(),
 
+  // Filter > Deal. "" = open-auction delivery only.
+  dealId: Joi.string().trim().max(100).allow("").optional(),
+
   // Free-text search across stored dimension fields (campaignId/publisher/geo).
   search: Joi.string().trim().optional(),
 
@@ -76,6 +79,7 @@ const getSuperReport = Joi.object({
   campaignId: Joi.string().trim().optional(),
   campaignIds: Joi.array().items(Joi.string().trim()).optional(),
   bundle: Joi.string().trim().optional(),
+  dealId: Joi.string().trim().max(100).allow("").optional(),
   search: Joi.string().trim().optional(),
 
   preset: Joi.string().valid(...Object.values(DATE_PRESET)).optional(),

@@ -22,7 +22,7 @@ const creativeService = {
     }
     const skip = (page - 1) * limit;
     const [rows, total] = await Promise.all([
-      creativeModel.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      creativeModel.find(query).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit),
       creativeModel.countDocuments(query),
     ]);
     return { data: rows, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) || 1 } };

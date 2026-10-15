@@ -1,4 +1,4 @@
-const { AUDIENCE_TARGET, INVENTORY_TYPE } = require("../campaign/constant");
+const { AUDIENCE_TARGET, INVENTORY_TYPE, FREQ_UNIT } = require("../campaign/constant");
 
 module.exports = {
   STATUS: {
@@ -28,6 +28,48 @@ module.exports = {
     EVEN: "even",
   },
 
+  // Environment: in-app (request has `app`) or mobile web (`site`).
+  CHANNEL: {
+    APP: "app",
+    WEB: "web",
+  },
+
+  // Retargeting audiences the engine keeps per campaign (Redis, keyed by ad id).
+  SEGMENT: {
+    CLICKERS: "clickers",
+    VIEWERS: "viewers",
+    ANY: "any", // clicked or saw
+  },
+
+  // OpenRTB 2.5 device.devicetype.
+  DEVICE_TYPE: {
+    1: "Mobile / tablet",
+    2: "Personal computer",
+    3: "Connected TV",
+    4: "Phone",
+    5: "Tablet",
+    6: "Connected device",
+    7: "Set-top box",
+  },
+
+  // OpenRTB 2.5 device.connectiontype.
+  CONNECTION_TYPE: {
+    0: "Unknown",
+    1: "Ethernet",
+    2: "Wi-Fi",
+    3: "Cellular (unknown generation)",
+    4: "2G",
+    5: "3G",
+    6: "4G",
+    7: "5G",
+  },
+
+  MAX_FLIGHTS: 20,
+
+  // Inline entries per rule; bigger sets belong in a targeting list.
+  MAX_INLINE_VALUES: 5000,
+
   AUDIENCE_TARGET,
   INVENTORY_TYPE,
+  FREQ_UNIT,
 };

@@ -28,6 +28,10 @@ const advertiserSchema = new mongoose.Schema(
       currency: { type: String, default: DEFAULT_CURRENCY },
       clickUrl: { type: String, default: null }, // prefill for campaign CTA URL
       mmpPlatform: { type: String, default: null },
+      // Presets that prefill its new campaigns / line items / targeting.
+      campaignPresetId: { type: String, default: null },
+      lineItemPresetId: { type: String, default: null },
+      targetingPresetId: { type: String, default: null },
     },
 
     createdBy: { type: String, default: null },
