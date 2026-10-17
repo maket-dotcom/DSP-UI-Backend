@@ -8,9 +8,17 @@ const isObjectId = (v) => typeof v === "string" && /^[a-fA-F0-9]{24}$/.test(v);
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const notDeleted = { $ne: STATUS.DELETED };
 
-const assertAdvertiser = async (advertiserId, orgId) => {
-  const n = await advertiserModel.countDocuments({ _id: advertiserId, orgId, status: notDeleted });
-  if (!n) throw new Error(`No advertiser exists with id: ${advertiserId}`);
+// The caller's modifiers: one network's when the caller works in a network
+// (a network user, or an org user who entered one), else the whole org.
+const scopeOf = (reqBy) =>
+  isUndefinedOrNull(reqBy.network_id)
+    ? { orgId: reqBy.org_id }
+    : { orgId: reqBy.org_id, networkId: reqBy.network_id };
+
+const assertAdvertiser = async (advertiserId, scope) => {
+  const adv = await advertiserModel.findOne({ _id: advertiserId, ...scope, status: notDeleted }).select({ name: 1, networkId: 1 }).lean();
+  if (isUndefinedOrNull(adv)) throw new Error(`No advertiser exists with id: ${advertiserId}`);
+  return adv;
 };
 
 // Non-deleted line items using each modifier.
@@ -26,7 +34,7 @@ const usage = async (orgId, ids) => {
 const deliveryModifierService = {
   list: async ({ data, reqBy }) => {
     const { page, limit, advertiserId, search } = data;
-    const query = { orgId: reqBy.org_id, status: notDeleted };
+    const query = { ...scopeOf(reqBy), status: notDeleted };
     if (advertiserId) query.advertiserId = advertiserId;
     if (!isUndefinedOrNull(search) && search !== "") query.name = new RegExp(escapeRegex(search), "i");
     const skip = (page - 1) * limit;
@@ -47,7 +55,7 @@ const deliveryModifierService = {
   // The advertiser's delivery modifiers, for the line item picker.
   options: async ({ data, reqBy }) => {
     const rows = await deliveryModifierModel
-      .find({ orgId: reqBy.org_id, advertiserId: data.advertiserId, status: notDeleted })
+      .find({ ...scopeOf(reqBy), advertiserId: data.advertiserId, status: notDeleted })
       .select({ name: 1, terms: 1 })
       .sort({ name: 1 })
       .lean();
@@ -56,16 +64,17 @@ const deliveryModifierService = {
 
   getById: async ({ id, reqBy }) => {
     if (!isObjectId(id)) throw new Error("Invalid delivery modifier id");
-    const row = await deliveryModifierModel.findOne({ _id: id, orgId: reqBy.org_id, status: notDeleted });
+    const row = await deliveryModifierModel.findOne({ _id: id, ...scopeOf(reqBy), status: notDeleted });
     if (isUndefinedOrNull(row)) throw new Error(`No delivery modifier exists with id: ${id}`);
     return { data: row };
   },
 
   create: async ({ data, reqBy }) => {
-    await assertAdvertiser(data.advertiserId, reqBy.org_id);
+    const adv = await assertAdvertiser(data.advertiserId, scopeOf(reqBy));
     const saved = await new deliveryModifierModel({
       ...data,
       orgId: reqBy.org_id,
+      networkId: adv.networkId || null,
       createdBy: reqBy.user_id || null,
       updatedBy: reqBy.user_id || null,
     }).save();
@@ -75,7 +84,7 @@ const deliveryModifierService = {
   update: async ({ id, data, reqBy }) => {
     if (!isObjectId(id)) throw new Error("Invalid delivery modifier id");
     const updated = await deliveryModifierModel.findOneAndUpdate(
-      { _id: id, orgId: reqBy.org_id, status: notDeleted },
+      { _id: id, ...scopeOf(reqBy), status: notDeleted },
       { $set: { ...data, updatedBy: reqBy.user_id || null } },
       { new: true }
     );
@@ -89,7 +98,7 @@ const deliveryModifierService = {
     const used = (await usage(reqBy.org_id, [id]))[id] || 0;
     if (used > 0) throw new Error(`${used} line item(s) still use this delivery modifier. Remove it from them first.`);
     const updated = await deliveryModifierModel.findOneAndUpdate(
-      { _id: id, orgId: reqBy.org_id, status: notDeleted },
+      { _id: id, ...scopeOf(reqBy), status: notDeleted },
       { $set: { status: STATUS.DELETED, updatedBy: reqBy.user_id || null } },
       { new: true }
     );

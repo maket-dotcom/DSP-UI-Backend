@@ -11,6 +11,15 @@ require("dotenv").config();
 const advertiserService = () => require("../advertiser/service");
 const advertiserModel = () => require("../advertiser/model");
 const lineItemService = () => require("../lineItem/service");
+const networkModel = () => require("../network/model");
+const approvalService = () => require("../approval/service");
+
+// The caller's campaigns: one network's when the caller works in a network
+// (a network user, or an org user who entered one), else the whole org.
+const scopeOf = (reqBy) =>
+  isUndefinedOrNull(reqBy.network_id)
+    ? { orgId: reqBy.org_id }
+    : { orgId: reqBy.org_id, networkId: reqBy.network_id };
 
 // Tell the MCP bidder when an opted-in campaign changes (status, budget, …).
 const notifyIfMcp = async (campaign) => {
@@ -20,8 +29,14 @@ const notifyIfMcp = async (campaign) => {
 const campaignService = {
 
   addCampaign: async ({ data, reqBy }) => {
-    await advertiserService().assertUsable({ id: data.advertiserId, orgId: reqBy.org_id });
-    const payload = { ...data, orgId: reqBy.org_id };
+    const adv = await advertiserService().assertUsable({
+      id: data.advertiserId,
+      orgId: reqBy.org_id,
+      networkId: reqBy.network_id,
+    });
+    const payload = { ...data, orgId: reqBy.org_id, networkId: adv.networkId || null };
+    // A network's campaign waits for its org's approval (org users' doesn't).
+    payload.approval = await approvalService().initial({ reqBy, networkId: payload.networkId });
 
     // Mobile campaigns: pull the provided app icon into our bucket and persist
     // our bucket URL in appIconLink.
@@ -48,7 +63,8 @@ const campaignService = {
   listCampaigns: async ({ data, reqBy }) => {
     const { page, limit, type, status, search, advertiserId } = data;
 
-    const query = { orgId: reqBy.org_id };
+    const query = scopeOf(reqBy);
+    if (isUndefinedOrNull(reqBy.network_id) && data.networkId) query.networkId = data.networkId;
     query.status = isUndefinedOrNull(status) ? { $ne: STATUS.DELETED } : status;
     if (!isUndefinedOrNull(type)) query.type = type;
     if (!isUndefinedOrNull(advertiserId)) query.advertiserId = advertiserId;
@@ -63,11 +79,15 @@ const campaignService = {
       campaignModel.countDocuments(query),
     ]);
 
-    // Advertiser name + line item counts for each row.
+    // Advertiser and network names + line item counts for each row.
     const advIds = [...new Set(campaigns.map((c) => c.advertiserId).filter(Boolean))];
-    const [advs, liCounts] = await Promise.all([
+    const netIds = [...new Set(campaigns.map((c) => c.networkId).filter(Boolean))];
+    const [advs, nets, liCounts] = await Promise.all([
       advIds.length
         ? advertiserModel().find({ _id: { $in: advIds }, orgId: reqBy.org_id }).select({ name: 1 }).lean()
+        : [],
+      netIds.length
+        ? networkModel().find({ _id: { $in: netIds }, orgId: reqBy.org_id }).select({ name: 1 }).lean()
         : [],
       lineItemService().countsByCampaign({
         orgId: reqBy.org_id,
@@ -75,12 +95,14 @@ const campaignService = {
       }),
     ]);
     const advName = Object.fromEntries(advs.map((a) => [String(a._id), a.name]));
+    const netName = Object.fromEntries(nets.map((n) => [String(n._id), n.name]));
 
     return {
       dataMapping: DATA_MAPPING,
       data: campaigns.map((c) => ({
         ...c,
         advertiserName: advName[c.advertiserId] || null,
+        networkName: netName[c.networkId] || null,
         lineItems: liCounts[String(c._id)] || { total: 0, active: 0 },
       })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
@@ -91,7 +113,7 @@ const campaignService = {
   // org as { id, value } pairs (value = campaign title)
   listCampaignOptions: async ({ reqBy }) => {
     const campaigns = await campaignModel
-      .find({ orgId: reqBy.org_id, status: { $ne: STATUS.DELETED } })
+      .find({ ...scopeOf(reqBy), status: { $ne: STATUS.DELETED } })
       .select({ title: 1 })
       .sort({ createdAt: -1, _id: -1 });
 
@@ -110,7 +132,7 @@ const campaignService = {
   },
 
   getCampaign: async ({ id, reqBy }) => {
-    const campaign = await campaignModel.findOne({ _id: id, orgId: reqBy.org_id }).lean();
+    const campaign = await campaignModel.findOne({ _id: id, ...scopeOf(reqBy) }).lean();
     if (isUndefinedOrNull(campaign)) {
       throw new Error("Invalid campaign id " + id);
     }
@@ -123,13 +145,31 @@ const campaignService = {
         .lean();
       if (a) advertiser = { id: String(a._id), name: a.name, status: a.status, category: a.category };
     }
-    return { data: { ...campaign, advertiser } };
+    let network = null;
+    if (campaign.networkId) {
+      const n = await networkModel().findOne({ _id: campaign.networkId, orgId: reqBy.org_id }).select({ name: 1 }).lean();
+      if (n) network = { id: String(n._id), name: n.name };
+    }
+    return { data: { ...campaign, advertiser, network } };
   },
 
   updateCampaign: async ({ id, data, reqBy }) => {
     const payload = { ...data };
+    const current = await campaignModel
+      .findOne({ _id: id, ...scopeOf(reqBy), status: { $ne: STATUS.DELETED } })
+      .lean();
+    if (isUndefinedOrNull(current)) throw new Error("Invalid campaign id " + id);
     if (!isUndefinedOrNull(payload.advertiserId)) {
-      await advertiserService().assertUsable({ id: payload.advertiserId, orgId: reqBy.org_id });
+      // A campaign can move to another advertiser only inside its own network.
+      const adv = await advertiserService().assertUsable({
+        id: payload.advertiserId,
+        orgId: reqBy.org_id,
+        networkId: reqBy.network_id,
+      });
+      if (current.networkId && adv.networkId !== current.networkId) {
+        throw new Error("A campaign can only move to an advertiser in the same network");
+      }
+      payload.networkId = adv.networkId || null;
     }
 
     // If a new app icon URL is supplied, download it into our bucket and store
@@ -145,21 +185,30 @@ const campaignService = {
     // An approved MCP ad links to the campaign's CTA. If the advertiser
     // changes that link, the ad goes back to super-admin review.
     if (!isUndefinedOrNull(payload.ctaUrl)) {
-      const existing = await campaignModel
-        .findOne({ _id: id, orgId: reqBy.org_id, status: { $ne: STATUS.DELETED } })
-        .select({ ctaUrl: 1, mcpEnabled: 1, mcp: 1 });
       if (
-        existing?.mcpEnabled &&
-        existing.mcp?.reviewStatus === CAMPAIGN_REVIEW_STATUS.APPROVED &&
-        existing.ctaUrl !== payload.ctaUrl
+        current.mcpEnabled &&
+        current.mcp?.reviewStatus === CAMPAIGN_REVIEW_STATUS.APPROVED &&
+        current.ctaUrl !== payload.ctaUrl
       ) {
         payload["mcp.reviewStatus"] = CAMPAIGN_REVIEW_STATUS.PENDING;
         payload["mcp.reviewNotes"] = "CTA link changed — please re-check the MCP ad destination.";
       }
     }
 
+    // A network's change to budget, dates, bids or links goes back to its org.
+    Object.assign(
+      payload,
+      await approvalService().afterEdit({
+        reqBy,
+        kind: "campaign",
+        existing: current,
+        patch: data,
+        networkId: payload.networkId || current.networkId,
+      })
+    );
+
     const updated = await campaignModel.findOneAndUpdate(
-      { _id: id, orgId: reqBy.org_id, status: { $ne: STATUS.DELETED } },
+      { _id: id, ...scopeOf(reqBy), status: { $ne: STATUS.DELETED } },
       { $set: payload },
       { new: true }
     );
@@ -174,7 +223,7 @@ const campaignService = {
   // (soft-deleted campaigns can't be reactivated)
   changeStatus: async ({ id, data, reqBy }) => {
     const updated = await campaignModel.findOneAndUpdate(
-      { _id: id, orgId: reqBy.org_id, status: { $ne: STATUS.DELETED } },
+      { _id: id, ...scopeOf(reqBy), status: { $ne: STATUS.DELETED } },
       { $set: { status: data.status } },
       { new: true }
     );
@@ -193,7 +242,7 @@ const campaignService = {
     if (data.enabled) set.mcpRequestedAt = new Date();
 
     let updated = await campaignModel.findOneAndUpdate(
-      { _id: id, orgId: reqBy.org_id, status: { $ne: STATUS.DELETED } },
+      { _id: id, ...scopeOf(reqBy), status: { $ne: STATUS.DELETED } },
       { $set: set },
       { new: true }
     );
@@ -220,7 +269,7 @@ const campaignService = {
   // soft delete: marks the campaign as deleted within the requester's org
   deleteCampaign: async ({ id, reqBy }) => {
     const deleted = await campaignModel.findOneAndUpdate(
-      { _id: id, orgId: reqBy.org_id, status: { $ne: STATUS.DELETED } },
+      { _id: id, ...scopeOf(reqBy), status: { $ne: STATUS.DELETED } },
       { $set: { status: STATUS.DELETED } }
     );
     if (isUndefinedOrNull(deleted)) {

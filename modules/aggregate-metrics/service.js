@@ -200,6 +200,26 @@ const aggregateTotals = async ({ orgId, campaignId, start, end }) => {
   );
 };
 
+// Inside a network (a network user, or an org user who entered one) the
+// dashboard covers only that network's campaigns. Returns the value for the
+// metrics' campaignId match: the asked campaign, the network's campaigns, or none.
+const campaignFilter = async (reqBy, campaignId) => {
+  if (isUndefinedOrNull(reqBy.network_id)) return campaignId;
+  const rows = await campaignModel
+    .find({ orgId: reqBy.org_id, networkId: reqBy.network_id })
+    .select({ _id: 1 })
+    .lean();
+  const ids = rows.map((r) => String(r._id));
+  if (isUndefinedOrNull(campaignId)) return { $in: ids };
+  return ids.includes(String(campaignId)) ? campaignId : { $in: [] };
+};
+
+// The caller's campaigns, for campaign counts.
+const campaignScope = (reqBy) =>
+  isUndefinedOrNull(reqBy.network_id)
+    ? { orgId: reqBy.org_id }
+    : { orgId: reqBy.org_id, networkId: reqBy.network_id };
+
 /* ------------------------------- services ------------------------------- */
 
 const aggregateMetricsService = {
@@ -207,7 +227,7 @@ const aggregateMetricsService = {
   // plus active/total campaign counts.
   getSummary: async ({ data, reqBy }) => {
     const orgId = reqBy.org_id;
-    const { campaignId } = data;
+    const campaignId = await campaignFilter(reqBy, data.campaignId);
     const range = resolveRange(data);
 
     const [cur, prev] = await Promise.all([
@@ -228,17 +248,17 @@ const aggregateMetricsService = {
     const reEngGoal = MOBILE_GOALS.RETARGETIN; // 'retargeting'
     const [campTotal, campActive, reTotal, reActive] = await Promise.all([
       campaignModel.countDocuments({
-        orgId,
+        ...campaignScope(reqBy),
         status: { $ne: CAMPAIGN_STATUS.DELETED },
       }),
-      campaignModel.countDocuments({ orgId, status: CAMPAIGN_STATUS.ACTIVE }),
+      campaignModel.countDocuments({ ...campaignScope(reqBy), status: CAMPAIGN_STATUS.ACTIVE }),
       campaignModel.countDocuments({
-        orgId,
+        ...campaignScope(reqBy),
         goal: reEngGoal,
         status: { $ne: CAMPAIGN_STATUS.DELETED },
       }),
       campaignModel.countDocuments({
-        orgId,
+        ...campaignScope(reqBy),
         goal: reEngGoal,
         status: CAMPAIGN_STATUS.ACTIVE,
       }),
@@ -276,7 +296,7 @@ const aggregateMetricsService = {
   // Performance line chart: date-wise series of one metric, current vs previous.
   getPerformance: async ({ data, reqBy }) => {
     const orgId = reqBy.org_id;
-    const { campaignId } = data;
+    const campaignId = await campaignFilter(reqBy, data.campaignId);
     const metric = data.metric || METRIC.INSTALL;
     const range = resolveRange(data);
     const expr = perDocMetric(metric);
@@ -308,7 +328,7 @@ const aggregateMetricsService = {
   // Goal Report bar chart: total bidCount grouped by eventName.
   getGoalReport: async ({ data, reqBy }) => {
     const orgId = reqBy.org_id;
-    const { campaignId } = data;
+    const campaignId = await campaignFilter(reqBy, data.campaignId);
     const range = resolveRange(data);
 
     const rows = await aggregateMetricsModel.aggregate([
@@ -332,9 +352,16 @@ const aggregateMetricsService = {
     const sortBy = data.sortBy || "spent";
     const limit = data.limit || 10;
     const range = resolveRange(data);
+    const inNetwork = await campaignFilter(reqBy, undefined);
 
     const rows = await aggregateMetricsModel.aggregate([
-      { $match: { orgId, date: { $gte: range.startDate, $lte: range.endDate } } },
+      {
+        $match: {
+          orgId,
+          ...(isUndefinedOrNull(inNetwork) ? {} : { campaignId: inNetwork }),
+          date: { $gte: range.startDate, $lte: range.endDate },
+        },
+      },
       {
         $group: {
           _id: "$campaignId",
@@ -407,7 +434,7 @@ const aggregateMetricsService = {
       const usedIds = rows.map((r) => String(r.campaignId));
       const fillers = await campaignModel
         .find({
-          orgId,
+          ...campaignScope(reqBy),
           status: CAMPAIGN_STATUS.ACTIVE,
           _id: { $nin: usedIds },
         })

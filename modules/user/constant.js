@@ -8,7 +8,12 @@ module.exports = {
     // Self-serve MCP publisher. Confined to /mcp-publisher routes; every other
     // guarded route lists its allowed types explicitly and excludes this one.
     SUPPLY: "supply",
+    // Network users: bound to one network inside an org (user.networkId).
+    NETWORK_ADMIN: "network_admin",
+    NETWORK_TEAM: "network_team",
   },
+
+  NETWORK_TYPES: ["network_admin", "network_team"],
 
   STATUS: {
     ACTIVE: "active",

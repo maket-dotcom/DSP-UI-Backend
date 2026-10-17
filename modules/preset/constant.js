@@ -14,6 +14,13 @@ module.exports = {
     TARGETING: "targeting",
   },
 
+  // Who sees an organization preset: private = the org only; public = every
+  // network too, read-only. A network's own presets are always private to it.
+  VISIBILITY: {
+    PRIVATE: "private",
+    PUBLIC: "public",
+  },
+
   // Advertiser default that points at each kind.
   ADVERTISER_DEFAULT: {
     campaign: "defaults.campaignPresetId",

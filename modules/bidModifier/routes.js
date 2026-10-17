@@ -7,7 +7,7 @@ const { TYPE: USER_TYPE } = require("../user/constant");
 const { RESOURCES, ACTIONS } = require("../userConfig/constant");
 
 // Bid modifiers are part of campaign setup → CAMPAIGN permission.
-const allowed = accessAllowed([USER_TYPE.SUPER_ADMIN, USER_TYPE.ADMIN, USER_TYPE.TEAM]);
+const allowed = accessAllowed([USER_TYPE.SUPER_ADMIN, USER_TYPE.ADMIN, USER_TYPE.TEAM, USER_TYPE.NETWORK_ADMIN, USER_TYPE.NETWORK_TEAM]);
 const can = (action) => requirePermission(RESOURCES.CAMPAIGN, action);
 
 /**

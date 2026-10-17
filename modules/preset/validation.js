@@ -1,5 +1,5 @@
 const Joi = require("joi");
-const { KIND } = require("./constant");
+const { KIND, VISIBILITY } = require("./constant");
 const lineItemValidation = require("../lineItem/validation");
 const campaignValidation = require("../campaign/validation");
 
@@ -34,6 +34,7 @@ const create = Joi.object({
   advertiserId: objectId.allow(null).default(null),
   payload: Joi.object().unknown(true).required(),
   notes: Joi.string().trim().max(2000).allow("", null),
+  visibility: Joi.string().valid(...Object.values(VISIBILITY)).default(VISIBILITY.PRIVATE),
 }).custom(withPayload);
 
 // The kind is fixed; the payload is re-validated against it in the service.
@@ -41,6 +42,7 @@ const update = Joi.object({
   name: Joi.string().trim().max(120),
   payload: Joi.object().unknown(true),
   notes: Joi.string().trim().max(2000).allow("", null),
+  visibility: Joi.string().valid(...Object.values(VISIBILITY)),
 }).min(1);
 
 const list = Joi.object({

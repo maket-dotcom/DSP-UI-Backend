@@ -62,7 +62,7 @@ const { RESOURCES, ACTIONS } = require("../userConfig/constant");
 router.post(
   "/data",
   auth,
-  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM, TYPE.NETWORK_ADMIN, TYPE.NETWORK_TEAM]),
   requirePermission(RESOURCES.REPORT, ACTIONS.VIEW),
   execute(reportController.getReport)
 );
@@ -104,7 +104,7 @@ router.post(
 router.post(
   "/campaign-bundles",
   auth,
-  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM, TYPE.NETWORK_ADMIN, TYPE.NETWORK_TEAM]),
   requirePermission(RESOURCES.REPORT, ACTIONS.VIEW),
   execute(reportController.getCampaignBundles)
 );

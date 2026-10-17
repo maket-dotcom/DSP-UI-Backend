@@ -3,10 +3,18 @@ const creativeModel = require("./model");
 const mediaModel = require("../media/model");
 const { STATUS } = require("./constant");
 const { isUndefinedOrNull } = require("../../utils/validators");
+const approvalService = require("../approval/service");
 
 const isObjectId = (v) => typeof v === "string" && /^[a-fA-F0-9]{24}$/.test(v);
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const notDeleted = { $ne: STATUS.DELETED };
+
+// The caller's creatives: one network's when the caller works in a network
+// (a network user, or an org user who entered one), else the whole org.
+const scopeOf = (reqBy) =>
+  isUndefinedOrNull(reqBy.network_id)
+    ? { orgId: reqBy.org_id }
+    : { orgId: reqBy.org_id, networkId: reqBy.network_id };
 
 // Lazily required to avoid a require cycle (lineItem → creative → lineItem).
 const lineItemModel = () => require("../lineItem/model");
@@ -14,7 +22,7 @@ const lineItemModel = () => require("../lineItem/model");
 const creativeService = {
   list: async ({ data, reqBy }) => {
     const { advertiserId, type, status, search, page, limit } = data;
-    const query = { orgId: reqBy.org_id, advertiserId, status: status || notDeleted };
+    const query = { ...scopeOf(reqBy), advertiserId, status: status || notDeleted };
     if (!isUndefinedOrNull(type)) query.type = type;
     if (!isUndefinedOrNull(search) && search !== "") {
       const rx = new RegExp(escapeRegex(search), "i");
@@ -30,13 +38,19 @@ const creativeService = {
 
   create: async ({ data, reqBy }) => {
     const { advertiserService } = require("../advertiser");
-    await advertiserService.assertUsable({ id: data.advertiserId, orgId: reqBy.org_id });
+    const adv = await advertiserService.assertUsable({
+      id: data.advertiserId,
+      orgId: reqBy.org_id,
+      networkId: reqBy.network_id,
+    });
 
     const { mediaId, ...fields } = data;
     const doc = {
       ...fields,
       orgId: reqBy.org_id,
+      networkId: adv.networkId || null,
       status: STATUS.ACTIVE,
+      approval: await approvalService.initial({ reqBy, networkId: adv.networkId }),
       createdBy: reqBy.user_id || null,
       updatedBy: reqBy.user_id || null,
     };
@@ -44,9 +58,9 @@ const creativeService = {
     // Reuse the upload's id as the creative id (see model). Re-creating a
     // creative for the same upload returns the existing one.
     if (!isUndefinedOrNull(mediaId)) {
-      const media = await mediaModel.findOne({ _id: mediaId, orgId: reqBy.org_id }).lean();
+      const media = await mediaModel.findOne({ _id: mediaId, ...scopeOf(reqBy) }).lean();
       if (isUndefinedOrNull(media)) throw new Error(`No uploaded media exists with id: ${mediaId}`);
-      const existing = await creativeModel.findOne({ _id: mediaId, orgId: reqBy.org_id });
+      const existing = await creativeModel.findOne({ _id: mediaId, ...scopeOf(reqBy) });
       if (existing) return { message: "Creative already exists", data: existing };
       doc._id = new mongoose.Types.ObjectId(mediaId);
       if (isUndefinedOrNull(doc.link) || doc.link === "") doc.link = media.link1;
@@ -60,9 +74,13 @@ const creativeService = {
 
   update: async ({ id, data, reqBy }) => {
     if (!isObjectId(id)) throw new Error("Invalid creative id");
+    const existing = await creativeModel.findOne({ _id: id, ...scopeOf(reqBy), status: notDeleted }).lean();
+    if (isUndefinedOrNull(existing)) throw new Error(`No creative exists with id: ${id}`);
+    // A network's change to the click-through link goes back to its org.
+    const approval = await approvalService.afterEdit({ reqBy, kind: "creative", existing, patch: data, networkId: existing.networkId });
     const updated = await creativeModel.findOneAndUpdate(
-      { _id: id, orgId: reqBy.org_id, status: notDeleted },
-      { $set: { ...data, updatedBy: reqBy.user_id || null } },
+      { _id: id, ...scopeOf(reqBy), status: notDeleted },
+      { $set: { ...data, ...approval, updatedBy: reqBy.user_id || null } },
       { new: true }
     );
     if (isUndefinedOrNull(updated)) throw new Error(`No creative exists with id: ${id}`);
@@ -74,7 +92,7 @@ const creativeService = {
   remove: async ({ id, reqBy }) => {
     if (!isObjectId(id)) throw new Error("Invalid creative id");
     const using = await lineItemModel().countDocuments({
-      orgId: reqBy.org_id,
+      ...scopeOf(reqBy),
       status: notDeleted,
       "creatives.creativeId": id,
     });
@@ -82,7 +100,7 @@ const creativeService = {
       throw new Error(`This creative is used by ${using} line item(s). Remove it from them first.`);
     }
     const updated = await creativeModel.findOneAndUpdate(
-      { _id: id, orgId: reqBy.org_id, status: notDeleted },
+      { _id: id, ...scopeOf(reqBy), status: notDeleted },
       { $set: { status: STATUS.DELETED, updatedBy: reqBy.user_id || null } },
       { new: true }
     );

@@ -30,6 +30,7 @@ const deliveryModifierSchema = new mongoose.Schema(
   {
     orgId: { type: String, required: true },
     advertiserId: { type: String, required: true },
+    networkId: { type: String, default: null }, // the advertiser's network
     name: { type: String, required: true },
     terms: { type: [termSchema], default: [] },
     notes: { type: String, default: null },

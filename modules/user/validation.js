@@ -2,8 +2,11 @@ const Joi = require("joi");
 const { TYPE, STATUS, CATEGORY_ARRAY, TIMEZONE_ARRAY } = require("./constant");
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// org members an admin/team can manage; super_admin is intentionally excluded
-const MANAGEABLE_TYPES = [TYPE.ADMIN, TYPE.TEAM];
+// org and network members an admin/team can manage; super_admin is intentionally excluded
+const MANAGEABLE_TYPES = [TYPE.ADMIN, TYPE.TEAM, TYPE.NETWORK_ADMIN, TYPE.NETWORK_TEAM];
+const objectId = Joi.string().trim().pattern(/^[a-fA-F0-9]{24}$/).messages({
+  "string.pattern.base": "Invalid network id",
+});
 
 const acceptingArray = Joi.alternatives()
   .try(Joi.string(), Joi.array().items(Joi.string()))
@@ -103,7 +106,10 @@ const createUser = Joi.object({
     }),
   mobile: Joi.string().trim().required(),
   password: Joi.string().min(6).required(),
-  type: Joi.string().valid(...MANAGEABLE_TYPES).default(TYPE.TEAM),
+  // Defaults to team (network_team inside a network); see the service.
+  type: Joi.string().valid(...MANAGEABLE_TYPES).optional(),
+  // At org level: create a login for this network.
+  networkId: objectId.allow(null, "").optional(),
   gender: Joi.string().optional(),
   age: Joi.number().optional(),
   address: Joi.string().optional(),
@@ -132,6 +138,8 @@ const listUsers = Joi.object({
   type: Joi.string().valid(...MANAGEABLE_TYPES).optional(),
   status: Joi.string().valid(...Object.values(STATUS)).optional(),
   search: Joi.string().trim().optional(),
+  // At org level: list this network's users instead of the org's.
+  networkId: objectId.allow("").optional(),
 });
 
 module.exports = {

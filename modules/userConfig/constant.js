@@ -4,6 +4,7 @@ module.exports = {
     CREATE: "create",
     UPDATE: "update",
     DELETE: "delete",
+    APPROVE: "approve", // campaign: approve / reject what networks submit
   },
 
   RESOURCES: {
@@ -14,6 +15,7 @@ module.exports = {
     ORGANIZATION: "organization",
     PAYOUT: "payout",
     WALLET: "wallet",
+    NETWORK: "network",
   },
 
   STATUS: {

@@ -3,7 +3,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { isUndefinedOrNull } = require("../../utils/validators");
 const { gcs } = require("../../utils/gcs");
-const { TYPE, STATUS, DATA_MAPPING } = require('./constant');
+const { TYPE, STATUS, DATA_MAPPING, NETWORK_TYPES } = require('./constant');
 const { generateOTP } = require("../../utils/common");
 const sendMail = require('../../utils/notification/email/send');
 const { RedisCacheKey } = require("../../connection/redis");
@@ -27,6 +27,21 @@ const getUserCacheKey = (id) => {
   return `user_by_id_${id}`;
 }
 
+// Lazily required: the network module requires the user model.
+const networkModel = () => require("../network/model");
+const networkService = () => require("../network/service");
+
+// Users the caller manages: one network's when the caller works in a network
+// (a network user, or an org user who entered one), else the whole org.
+const userScope = (reqBy) =>
+  isUndefinedOrNull(reqBy.network_id)
+    ? { orgId: reqBy.org_id }
+    : { orgId: reqBy.org_id, networkId: reqBy.network_id };
+
+const isAdminLevel = (type) =>
+  type === TYPE.SUPER_ADMIN || type === TYPE.ADMIN || type === TYPE.NETWORK_ADMIN;
+const isAdminType = (type) => type === TYPE.ADMIN || type === TYPE.NETWORK_ADMIN;
+
 /**
  * Sign a JWT for the user, stash it in Redis under an opaque key, and return
  * that key as the bearer token. `auth`/`authSuperAdmin` resolve the key back to
@@ -39,6 +54,9 @@ const issueToken = async (user) => {
   };
   if (!isUndefinedOrNull(user.orgId)) {
     payload.org_id = user.orgId;
+  }
+  if (!isUndefinedOrNull(user.networkId)) {
+    payload.network_id = String(user.networkId);
   }
 
   const jwtToken = jwt.sign(payload, process.env.TOKEN_KEY, {
@@ -61,16 +79,16 @@ const validateMail = (email) => {
 
 const userService = {
 
-  // org-scoped login for admin/team members.
+  // org-scoped login for admin/team members and network users.
   // orgId is required because the same email may exist across organisations,
-  // and admin/team accounts are always bound to exactly one org.
+  // and these accounts are always bound to exactly one org.
   login: async ({ data }) => {
     const { orgId, email, password } = data;
 
     const user = await userDetailsModel.findOne({
       orgId,
       email,
-      type: { $in: [TYPE.ADMIN, TYPE.TEAM] },
+      type: { $in: [TYPE.ADMIN, TYPE.TEAM, ...NETWORK_TYPES] },
     });
 
     // Use a single generic error to avoid leaking which part was wrong.
@@ -86,6 +104,18 @@ const userService = {
       throw new Error("Invalid credentials");
     }
 
+    // A network user can sign in only while their network is active.
+    let network = null;
+    if (NETWORK_TYPES.includes(user.type)) {
+      network = await networkModel()
+        .findOne({ _id: user.networkId, orgId: user.orgId })
+        .select({ name: 1, status: 1 })
+        .lean();
+      if (isUndefinedOrNull(network) || network.status !== "active") {
+        throw new Error("Your network is turned off. Contact your organization.");
+      }
+    }
+
     const token = await issueToken(user);
 
     return {
@@ -98,6 +128,8 @@ const userService = {
           email: user.email,
           type: user.type,
           orgId: user.orgId,
+          networkId: user.networkId || null,
+          networkName: network ? network.name : null,
         },
       },
     };
@@ -288,13 +320,29 @@ const userService = {
     };
   },
 
-  // admin/team creates a user inside their own org
+  // admin/team creates a user inside their own org. Inside a network (a
+  // network user, or an org user who entered one) the new user joins that
+  // network; at org level, passing networkId creates a network login.
   createUser: async ({ data, reqBy }) => {
     let { name, email, mobile, password, type, gender, age, address, status, profilePic } = data;
-    if (isUndefinedOrNull(type)) type = TYPE.TEAM;
+
+    const networkId = reqBy.network_id || data.networkId || null;
+    let network = null;
+    if (networkId) {
+      network = await networkService().assertUsable({ id: networkId, orgId: reqBy.org_id });
+      if (isUndefinedOrNull(type)) type = TYPE.NETWORK_TEAM;
+      if (!NETWORK_TYPES.includes(type)) {
+        throw new Error("A network user must be a network admin or a network team member");
+      }
+    } else {
+      if (isUndefinedOrNull(type)) type = TYPE.TEAM;
+      if (NETWORK_TYPES.includes(type)) {
+        throw new Error("Pick the network this user belongs to");
+      }
+    }
 
     // a team member may not create an admin user
-    if (reqBy.type === TYPE.TEAM && type === TYPE.ADMIN) {
+    if (!isAdminLevel(reqBy.type) && isAdminType(type)) {
       throw new Error("You are not allowed to create an admin user");
     }
 
@@ -314,6 +362,7 @@ const userService = {
     user.mobile = mobile;
     user.type = type;
     user.orgId = reqBy.org_id;
+    user.networkId = networkId;
     user.gender = gender;
     user.age = age;
     user.address = address;
@@ -323,17 +372,25 @@ const userService = {
     user.password = await bcrypt.hash(password, 10);
     const savedUser = await user.save();
 
+    // The network's first admin login is its main contact.
+    if (network && type === TYPE.NETWORK_ADMIN && isUndefinedOrNull(network.adminId)) {
+      await networkModel().updateOne({ _id: network._id }, { $set: { adminId: String(savedUser._id) } });
+    }
+
     const result = savedUser.toObject();
     delete result.password;
 
     return { message: "User created successfully", data: result };
   },
 
-  // list users within the requester's org (paginated, excludes soft-deleted)
+  // list users within the requester's org (paginated, excludes soft-deleted).
+  // At org level this lists org users, or one network's users with networkId;
+  // inside a network it lists that network's users.
   listUsers: async ({ data, reqBy }) => {
     const { page, limit, type, status, search } = data;
 
-    const query = { orgId: reqBy.org_id };
+    const query = userScope(reqBy);
+    if (isUndefinedOrNull(reqBy.network_id)) query.networkId = data.networkId || null;
     query.status = isUndefinedOrNull(status) ? { $ne: STATUS.DELETED } : status;
     if (!isUndefinedOrNull(type)) query.type = type;
     if (!isUndefinedOrNull(search)) {
@@ -361,7 +418,7 @@ const userService = {
 
   getUser: async ({ userId, reqBy }) => {
     const user = await userDetailsModel
-      .findOne({ _id: userId, orgId: reqBy.org_id })
+      .findOne({ _id: userId, ...userScope(reqBy) })
       .select("-password");
     if (isUndefinedOrNull(user)) {
       throw new Error("Invalid user id " + userId);
@@ -370,19 +427,26 @@ const userService = {
   },
 
   updateUser: async ({ userId, data, reqBy }) => {
-    const target = await userDetailsModel.findOne({ _id: userId, orgId: reqBy.org_id });
+    const target = await userDetailsModel.findOne({ _id: userId, ...userScope(reqBy) });
     if (isUndefinedOrNull(target)) {
       throw new Error("Invalid user id " + userId);
     }
 
-    // only an admin (or super_admin) may modify an admin or grant the admin role
-    const callerIsAdminLevel =
-      reqBy.type === TYPE.ADMIN || reqBy.type === TYPE.SUPER_ADMIN;
-    if (target.type === TYPE.ADMIN && !callerIsAdminLevel) {
+    // only an admin (org, network or super) may modify an admin or grant the admin role
+    const callerIsAdminLevel = isAdminLevel(reqBy.type);
+    if (isAdminType(target.type) && !callerIsAdminLevel) {
       throw new Error("You are not allowed to modify an admin user");
     }
-    if (data.type === TYPE.ADMIN && !callerIsAdminLevel) {
+    if (isAdminType(data.type) && !callerIsAdminLevel) {
       throw new Error("You are not allowed to assign the admin role");
+    }
+    // org users stay org users and network users stay network users
+    if (!isUndefinedOrNull(data.type) && NETWORK_TYPES.includes(data.type) !== NETWORK_TYPES.includes(target.type)) {
+      throw new Error(
+        NETWORK_TYPES.includes(target.type)
+          ? "A network user must be a network admin or a network team member"
+          : "An organization user must be an admin or a team member"
+      );
     }
 
     const allowed = ["name", "mobile", "type", "gender", "age", "address", "status", "profilePic"];
@@ -392,7 +456,7 @@ const userService = {
     }
 
     const updated = await userDetailsModel
-      .findOneAndUpdate({ _id: userId, orgId: reqBy.org_id }, { $set: update }, { new: true })
+      .findOneAndUpdate({ _id: userId, ...userScope(reqBy) }, { $set: update }, { new: true })
       .select("-password");
 
     await RedisCacheKey.deleteKey(getUserCacheKey(userId));
@@ -406,18 +470,16 @@ const userService = {
       throw new Error("You cannot delete your own account");
     }
 
-    const target = await userDetailsModel.findOne({ _id: userId, orgId: reqBy.org_id });
+    const target = await userDetailsModel.findOne({ _id: userId, ...userScope(reqBy) });
     if (isUndefinedOrNull(target)) {
       throw new Error("Invalid user id " + userId);
     }
-    const callerIsAdminLevel =
-      reqBy.type === TYPE.ADMIN || reqBy.type === TYPE.SUPER_ADMIN;
-    if (target.type === TYPE.ADMIN && !callerIsAdminLevel) {
+    if (isAdminType(target.type) && !isAdminLevel(reqBy.type)) {
       throw new Error("You are not allowed to delete an admin user");
     }
 
     await userDetailsModel.findOneAndUpdate(
-      { _id: userId, orgId: reqBy.org_id },
+      { _id: userId, ...userScope(reqBy) },
       { $set: { status: STATUS.DELETED } }
     );
 

@@ -9,6 +9,8 @@ const { STATUS, DEFAULT_CURRENCY } = require("./constant");
 const advertiserSchema = new mongoose.Schema(
   {
     orgId: { type: String, required: true },
+    // The network the advertiser belongs to; fixed once created.
+    networkId: { type: String, default: null },
 
     // --- Essential settings ---
     name: { type: String, required: true },
@@ -41,6 +43,7 @@ const advertiserSchema = new mongoose.Schema(
 );
 
 advertiserSchema.index({ orgId: 1, status: 1 });
+advertiserSchema.index({ orgId: 1, networkId: 1, status: 1 });
 advertiserSchema.index({ orgId: 1, name: 1 });
 
 module.exports =

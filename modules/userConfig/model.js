@@ -10,6 +10,7 @@ var userConfigSchema = new mongoose.Schema(
   {
     userId: { type: String, unique: true, index: true },
     orgId: String,
+    networkId: { type: String, default: null }, // set for network users
     permissions: { type: Schema.Types.Mixed, default: {} },
     status: { type: String, default: STATUS.ACTIVE },
   },

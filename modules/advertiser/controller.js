@@ -7,7 +7,10 @@ const advertiserController = {
     const data = validateInfo(validate.list, req.query);
     return advertiserService.list({ data, reqBy: req.user });
   },
-  options: async (req) => advertiserService.options({ reqBy: req.user }),
+  options: async (req) => {
+    const data = validateInfo(validate.options, req.query);
+    return advertiserService.options({ data, reqBy: req.user });
+  },
   categories: async () => advertiserService.categories(),
   get: async (req) => advertiserService.getById({ id: req.params.id, reqBy: req.user }),
   create: async (req) => {

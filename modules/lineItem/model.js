@@ -61,6 +61,19 @@ const lineItemSchema = new mongoose.Schema(
   {
     orgId: { type: String, required: true },
     advertiserId: { type: String, required: true },
+    networkId: { type: String, default: null }, // copied from the campaign
+
+    // The org's approval of what a network created or changed (modules/approval).
+    // Missing = approved (records from before approvals).
+    approval: {
+      status: { type: String },
+      note: { type: String },
+      changes: { type: [String], default: undefined }, // fields changed since the last approval
+      submittedBy: { type: String },
+      submittedAt: { type: Date },
+      reviewedBy: { type: String },
+      reviewedAt: { type: Date },
+    },
     campaignId: { type: String, required: true },
 
     name: { type: String, required: true },
@@ -160,6 +173,7 @@ const lineItemSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+lineItemSchema.index({ orgId: 1, "approval.status": 1 }); // approval queue
 lineItemSchema.index({ orgId: 1, campaignId: 1, status: 1 });
 lineItemSchema.index({ campaignId: 1, status: 1 }); // bid engine load
 lineItemSchema.index({ orgId: 1, "creatives.creativeId": 1 });

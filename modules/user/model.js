@@ -12,6 +12,7 @@ var userSchema = new mongoose.Schema(
     email: { type: String, unique: false },
     secondaryEmails: { type: [String] },
     orgId: String,
+    networkId: { type: String, default: null }, // network users only
     gender: String,
     age: Number,
     type: String,

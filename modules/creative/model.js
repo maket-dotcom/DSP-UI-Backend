@@ -11,6 +11,19 @@ const creativeSchema = new mongoose.Schema(
   {
     orgId: { type: String, required: true },
     advertiserId: { type: String, required: true },
+    networkId: { type: String, default: null }, // copied from the advertiser
+
+    // The org's approval of what a network created or changed (modules/approval).
+    // Missing = approved (records from before approvals).
+    approval: {
+      status: { type: String },
+      note: { type: String },
+      changes: { type: [String], default: undefined }, // fields changed since the last approval
+      submittedBy: { type: String },
+      submittedAt: { type: Date },
+      reviewedBy: { type: String },
+      reviewedAt: { type: Date },
+    },
     name: { type: String, default: null },
     type: { type: String, default: TYPE.IMAGE }, // image | video
     status: { type: String, default: STATUS.ACTIVE },
@@ -31,6 +44,7 @@ const creativeSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+creativeSchema.index({ orgId: 1, "approval.status": 1 }); // approval queue
 creativeSchema.index({ orgId: 1, advertiserId: 1, status: 1 });
 
 module.exports =

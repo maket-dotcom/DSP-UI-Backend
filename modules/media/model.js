@@ -5,6 +5,7 @@ mongoose.Promise = global.Promise;
 var mediaSchema = new mongoose.Schema(
   {
     orgId: String,
+    networkId: { type: String, default: null }, // uploads made inside a network
     brandId: String,
     name: String,
     link1: String,

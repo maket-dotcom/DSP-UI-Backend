@@ -1,5 +1,5 @@
 const Joi = require("joi");
-const { KIND, MAX_VALUES } = require("./constant");
+const { KIND, MAX_VALUES, VISIBILITY } = require("./constant");
 
 // Values arrive as an array (the UI splits pasted text / CSV). They are
 // trimmed, lower-cased and de-duplicated, matching how the engine compares;
@@ -23,12 +23,14 @@ const create = Joi.object({
   kind: Joi.string().valid(...Object.values(KIND)).default(KIND.BUNDLE),
   values: values.default([]),
   notes: Joi.string().trim().max(2000).allow("", null),
+  visibility: Joi.string().valid(...Object.values(VISIBILITY)).default(VISIBILITY.PRIVATE),
 }).custom((v) => ({ ...v, values: normalise(v.kind, v.values) }));
 
 const update = Joi.object({
   name: Joi.string().trim().max(120),
   values: values,
   notes: Joi.string().trim().max(2000).allow("", null),
+  visibility: Joi.string().valid(...Object.values(VISIBILITY)),
 }).min(1);
 
 const list = Joi.object({
@@ -40,6 +42,8 @@ const list = Joi.object({
 
 const options = Joi.object({
   kind: Joi.string().valid(...Object.values(KIND)).default(KIND.BUNDLE),
+  // org level: only lists this network's line items can use
+  networkId: Joi.string().trim().pattern(/^[a-fA-F0-9]{24}$/).allow("").optional(),
 });
 
 module.exports = { create, update, list, options, normalise };

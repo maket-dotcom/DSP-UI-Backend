@@ -1,7 +1,10 @@
 const jwt = require("jsonwebtoken");
 const { isUndefinedOrNull } = require("../utils/validators");
 const { getSubdomain } = require('../utils/common');
-const { TYPE } = require('../modules/user/constant');
+const { TYPE, NETWORK_TYPES } = require('../modules/user/constant');
+const networkModel = require('../modules/network/model');
+const userConfigService = require('../modules/userConfig/service');
+const { RESOURCES, ACTIONS, STATUS: CONFIG_STATUS } = require('../modules/userConfig/constant');
 //const userService = require('../modules/user/service');
 //const orgService = require('../modules/organization/service')
 const { RedisCacheKey } = require("../connection/redis");
@@ -39,6 +42,52 @@ const getOrgByIDAndCache = async (id) => {
   await RedisCacheKey.setValueForTime(getOrgCacheKey(id), JSON.stringify(org));
 
   return org;
+}
+
+const getNetworkCacheKey = (id) => {
+  return `network_by_id_${id}`;
+}
+
+// Cached for a minute (the network service drops it on every change), so
+// turning a network off blocks its users on their next request.
+const getNetworkByIDAndCache = async (id) => {
+  if (!/^[a-fA-F0-9]{24}$/.test(String(id || ""))) return null;
+  const data = await RedisCacheKey.getValue(getNetworkCacheKey(id));
+  if (!isUndefinedOrNull(data)) {
+    return JSON.parse(data);
+  }
+  const network = await networkModel.findOne({ _id: id }).select({ orgId: 1, name: 1, status: 1 }).lean();
+  if (isUndefinedOrNull(network)) return null;
+  await RedisCacheKey.setValueForTime(getNetworkCacheKey(id), JSON.stringify(network), 60);
+  return network;
+}
+
+// Org team members may enter a network only with the `network: view` permission.
+const teamCanEnterNetworks = async (user) => {
+  const { config } = await userConfigService.getByUser({ userId: user.user_id, reqBy: user });
+  if (isUndefinedOrNull(config) || config.status !== CONFIG_STATUS.ACTIVE) return false;
+  const allowed = config.permissions ? config.permissions[RESOURCES.NETWORK] : null;
+  return Array.isArray(allowed) && allowed.includes(ACTIONS.VIEW);
+}
+
+// Org users (and super admins inside an org) work inside one of the org's
+// networks by sending the `x-network-id` header, the same way a super admin
+// enters an org. Every network-scoped service then filters by
+// req.user.network_id; req.user.user_id stays the real person. Returns an
+// error message, or null when the request may continue.
+const enterNetwork = async (req) => {
+  const networkId = req?.headers?.["x-network-id"];
+  if (isUndefinedOrNull(networkId) || networkId === "") return null;
+  if (req.user.type === TYPE.TEAM && !(await teamCanEnterNetworks(req.user))) {
+    return "You don't have access to networks.";
+  }
+  const network = await getNetworkByIDAndCache(networkId);
+  if (isUndefinedOrNull(network) || network.orgId != req.user.org_id || network.status === "deleted") {
+    return "This network doesn't exist in the organization.";
+  }
+  req.user.network_id = String(network._id);
+  req.user.acting_in_network = true;
+  return null;
 }
 
 const getUserByIDAndCache = async (id) => {
@@ -107,8 +156,22 @@ const verifyToken = async (req, res, next) => {
         );
     }
     req.user.org_id = orgId;
+    const networkError = await enterNetwork(req);
+    if (!isUndefinedOrNull(networkError)) return res.status(400).send(networkError);
     // A super admin operates across orgs, so skip the org/subdomain host check.
     return next();
+  }
+
+  // Network users are bound to the network in their token (no header can
+  // change it), and that network must still be active.
+  if (NETWORK_TYPES.includes(req.user.type)) {
+    const network = await getNetworkByIDAndCache(req.user.network_id);
+    if (isUndefinedOrNull(network) || network.orgId != req.user.org_id || network.status !== "active") {
+      return res.status(403).send("Your network is turned off. Contact your organization.");
+    }
+  } else if (req.user.type === TYPE.ADMIN || req.user.type === TYPE.TEAM) {
+    const networkError = await enterNetwork(req);
+    if (!isUndefinedOrNull(networkError)) return res.status(400).send(networkError);
   }
 
   //checking host

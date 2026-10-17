@@ -4,15 +4,17 @@ const { TYPE } = require("../modules/user/constant");
 const { isUndefinedOrNull } = require("../utils/validators");
 
 // requirePermission gates a route on the caller's stored permission config.
-// super_admin and admin bypass the check; every other user must have an active
-// config granting `action` on `resource` (see RESOURCES / ACTIONS constants).
+// super_admin, admin and network_admin bypass the check (a network admin only
+// reaches routes that allow network users, and only sees its own network);
+// every other user must have an active config granting `action` on `resource`
+// (see RESOURCES / ACTIONS constants).
 // Must run after the `auth` middleware so req.user is populated.
 const requirePermission = (resource, action) => {
   return async (req, res, next) => {
     try {
       const { type, user_id } = req.user;
 
-      if (type === TYPE.SUPER_ADMIN || type === TYPE.ADMIN) {
+      if (type === TYPE.SUPER_ADMIN || type === TYPE.ADMIN || type === TYPE.NETWORK_ADMIN) {
         return next();
       }
 

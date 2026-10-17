@@ -52,7 +52,7 @@ router.post("/update", auth, accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.T
  *       200:
  *         description: org config fetched successfully
  */
-router.get("/get", auth, accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]), execute(orgController.get));
+router.get("/get", auth, accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM, TYPE.NETWORK_ADMIN, TYPE.NETWORK_TEAM]), execute(orgController.get));
 
 /**
  * @swagger
@@ -90,7 +90,7 @@ router.get("/config", execute(orgController.getOrgConfig));
  *       200:
  *         description: org config fetched successfully
  */
-router.get("/config-by-id", auth, accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM]), execute(orgController.getOrgConfigById));
+router.get("/config-by-id", auth, accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.TEAM, TYPE.NETWORK_ADMIN, TYPE.NETWORK_TEAM]), execute(orgController.getOrgConfigById));
 
 
 

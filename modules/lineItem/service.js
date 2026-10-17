@@ -8,6 +8,8 @@ const deliveryModifierService = require("../deliveryModifier/service");
 const { KIND: LIST_KIND } = require("../targetingList/constant");
 const { STATUS, FORMAT, DEVICE_TYPE, CONNECTION_TYPE } = require("./constant");
 const { isUndefinedOrNull } = require("../../utils/validators");
+const { NETWORK_TYPES } = require("../user/constant");
+const approvalService = require("../approval/service");
 
 const isObjectId = (v) => typeof v === "string" && /^[a-fA-F0-9]{24}$/.test(v);
 const notDeleted = { $ne: STATUS.DELETED };
@@ -17,10 +19,18 @@ const num = (v) => {
 };
 const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 
-// The campaign a line item belongs to, scoped to the caller's org.
-const loadCampaign = async (campaignId, orgId) => {
+// The caller's line items: one network's when the caller works in a network
+// (a network user, or an org user who entered one), else the whole org.
+const scopeOf = (reqBy) =>
+  isUndefinedOrNull(reqBy.network_id)
+    ? { orgId: reqBy.org_id }
+    : { orgId: reqBy.org_id, networkId: reqBy.network_id };
+const isOrgUser = (reqBy) => !NETWORK_TYPES.includes(reqBy.type);
+
+// The campaign a line item belongs to, scoped to the caller's org / network.
+const loadCampaign = async (campaignId, scope) => {
   if (!isObjectId(campaignId)) throw new Error("Invalid campaign id");
-  const c = await campaignModel.findOne({ _id: campaignId, orgId, status: notDeleted }).lean();
+  const c = await campaignModel.findOne({ _id: campaignId, ...scope, status: notDeleted }).lean();
   if (isUndefinedOrNull(c)) throw new Error(`No campaign exists with id: ${campaignId}`);
   if (isUndefinedOrNull(c.advertiserId) || c.advertiserId === "") {
     throw new Error("This campaign has no advertiser yet. Edit the campaign and pick an advertiser first.");
@@ -113,13 +123,14 @@ const validateAgainstCampaign = async ({ li, campaign, selfId, orgId }) => {
 
 // Targeting that points at other records: bundle lists, supply partners and
 // zones, and the campaigns whose audiences it retargets. Each must exist (and
-// lists / campaigns must be the caller's org's).
-const validateTargetingRefs = async ({ li, campaign, orgId }) => {
+// lists must be usable by the campaign's network, campaigns must be in it).
+const validateTargetingRefs = async ({ li, campaign, orgId, orgUser }) => {
   const t = li.targeting || {};
   const ids = (ie) => [...((ie || {}).include || []), ...((ie || {}).exclude || [])];
-  await targetingListService.assertBelongTo({ ids: ids(t.inventory?.bundleLists), kind: LIST_KIND.BUNDLE, orgId });
-  await targetingListService.assertBelongTo({ ids: ids(t.inventory?.dealLists), kind: LIST_KIND.DEAL, orgId });
-  await targetingListService.assertBelongTo({ ids: ids(t.geo?.zipLists), kind: LIST_KIND.ZIP, orgId });
+  const lists = { orgId, networkId: campaign.networkId || null, orgUser };
+  await targetingListService.assertBelongTo({ ids: ids(t.inventory?.bundleLists), kind: LIST_KIND.BUNDLE, ...lists });
+  await targetingListService.assertBelongTo({ ids: ids(t.inventory?.dealLists), kind: LIST_KIND.DEAL, ...lists });
+  await targetingListService.assertBelongTo({ ids: ids(t.geo?.zipLists), kind: LIST_KIND.ZIP, ...lists });
 
   if (li.bidModifierId) {
     await bidModifierService.assertUsable({ id: li.bidModifierId, advertiserId: campaign.advertiserId, orgId });
@@ -154,8 +165,11 @@ const validateTargetingRefs = async ({ li, campaign, orgId }) => {
     ),
   ];
   if (campaignIds.length) {
-    const found = await campaignModel.countDocuments({ _id: { $in: campaignIds }, orgId, status: notDeleted });
-    if (found !== campaignIds.length) throw new Error("Retargeting can only use your organization's campaigns");
+    const sameNetwork = campaign.networkId ? { networkId: campaign.networkId } : {};
+    const found = await campaignModel.countDocuments({ _id: { $in: campaignIds }, orgId, ...sameNetwork, status: notDeleted });
+    if (found !== campaignIds.length) {
+      throw new Error(`Retargeting can only use ${campaign.networkId ? "this network's" : "your organization's"} campaigns`);
+    }
   }
 };
 
@@ -168,33 +182,35 @@ const assertCanActivate = (li) => {
 
 const lineItemService = {
   list: async ({ data, reqBy }) => {
-    await loadCampaign(data.campaignId, reqBy.org_id);
-    const query = { orgId: reqBy.org_id, campaignId: data.campaignId, status: data.status || notDeleted };
+    await loadCampaign(data.campaignId, scopeOf(reqBy));
+    const query = { ...scopeOf(reqBy), campaignId: data.campaignId, status: data.status || notDeleted };
     const rows = await lineItemModel.find(query).sort({ createdAt: 1 });
     return { data: rows };
   },
 
   getById: async ({ id, reqBy }) => {
     if (!isObjectId(id)) throw new Error("Invalid line item id");
-    const li = await lineItemModel.findOne({ _id: id, orgId: reqBy.org_id, status: notDeleted });
+    const li = await lineItemModel.findOne({ _id: id, ...scopeOf(reqBy), status: notDeleted });
     if (isUndefinedOrNull(li)) throw new Error(`No line item exists with id: ${id}`);
     return { data: li };
   },
 
   create: async ({ data, reqBy }) => {
-    const campaign = await loadCampaign(data.campaignId, reqBy.org_id);
+    const campaign = await loadCampaign(data.campaignId, scopeOf(reqBy));
     const li = { ...data };
     if (li.bidding.strategy !== "fixed_cpm") li.bidding.cpm = null;
     if (li.bidModifierId === "") li.bidModifierId = null;
     if (li.deliveryModifierId === "") li.deliveryModifierId = null;
     await validateAgainstCampaign({ li, campaign, selfId: null, orgId: reqBy.org_id });
-    await validateTargetingRefs({ li, campaign, orgId: reqBy.org_id });
+    await validateTargetingRefs({ li, campaign, orgId: reqBy.org_id, orgUser: isOrgUser(reqBy) });
     assertCanActivate(li);
 
     const saved = await new lineItemModel({
       ...li,
       orgId: reqBy.org_id,
       advertiserId: campaign.advertiserId,
+      networkId: campaign.networkId || null,
+      approval: await approvalService.initial({ reqBy, networkId: campaign.networkId }),
       createdBy: reqBy.user_id || null,
       updatedBy: reqBy.user_id || null,
     }).save();
@@ -203,9 +219,9 @@ const lineItemService = {
 
   update: async ({ id, data, reqBy }) => {
     if (!isObjectId(id)) throw new Error("Invalid line item id");
-    const existing = await lineItemModel.findOne({ _id: id, orgId: reqBy.org_id, status: notDeleted }).lean();
+    const existing = await lineItemModel.findOne({ _id: id, ...scopeOf(reqBy), status: notDeleted }).lean();
     if (isUndefinedOrNull(existing)) throw new Error(`No line item exists with id: ${id}`);
-    const campaign = await loadCampaign(existing.campaignId, reqBy.org_id);
+    const campaign = await loadCampaign(existing.campaignId, scopeOf(reqBy));
 
     const patch = { ...data };
     if (patch.bidding && patch.bidding.strategy !== "fixed_cpm") patch.bidding.cpm = null;
@@ -213,12 +229,23 @@ const lineItemService = {
     if (patch.deliveryModifierId === "") patch.deliveryModifierId = null;
     const merged = { ...existing, ...patch };
     await validateAgainstCampaign({ li: merged, campaign, selfId: existing._id, orgId: reqBy.org_id });
-    if (patch.targeting || patch.bidModifierId || patch.deliveryModifierId) await validateTargetingRefs({ li: merged, campaign, orgId: reqBy.org_id });
+    if (patch.targeting || patch.bidModifierId || patch.deliveryModifierId) {
+      await validateTargetingRefs({ li: merged, campaign, orgId: reqBy.org_id, orgUser: isOrgUser(reqBy) });
+    }
     assertCanActivate(merged);
 
+    // A network's change to budget, bids, targeting, flights or creatives goes back to its org.
+    const approval = await approvalService.afterEdit({
+      reqBy,
+      kind: "lineItem",
+      existing,
+      patch,
+      networkId: existing.networkId || campaign.networkId,
+    });
+
     const updated = await lineItemModel.findOneAndUpdate(
-      { _id: id, orgId: reqBy.org_id, status: notDeleted },
-      { $set: { ...patch, updatedBy: reqBy.user_id || null } },
+      { _id: id, ...scopeOf(reqBy), status: notDeleted },
+      { $set: { ...patch, ...approval, updatedBy: reqBy.user_id || null } },
       { new: true }
     );
     return { message: "Line item updated successfully", data: updated };
@@ -226,7 +253,7 @@ const lineItemService = {
 
   changeStatus: async ({ id, status, reqBy }) => {
     if (!isObjectId(id)) throw new Error("Invalid line item id");
-    const existing = await lineItemModel.findOne({ _id: id, orgId: reqBy.org_id, status: notDeleted }).lean();
+    const existing = await lineItemModel.findOne({ _id: id, ...scopeOf(reqBy), status: notDeleted }).lean();
     if (isUndefinedOrNull(existing)) throw new Error(`No line item exists with id: ${id}`);
     assertCanActivate({ ...existing, status });
     await lineItemModel.updateOne({ _id: id }, { $set: { status, updatedBy: reqBy.user_id || null } });
@@ -236,7 +263,7 @@ const lineItemService = {
   remove: async ({ id, reqBy }) => {
     if (!isObjectId(id)) throw new Error("Invalid line item id");
     const updated = await lineItemModel.findOneAndUpdate(
-      { _id: id, orgId: reqBy.org_id, status: notDeleted },
+      { _id: id, ...scopeOf(reqBy), status: notDeleted },
       { $set: { status: STATUS.DELETED, updatedBy: reqBy.user_id || null } },
       { new: true }
     );
@@ -255,7 +282,7 @@ const lineItemService = {
         .sort({ name: 1 })
         .lean(),
       campaignModel
-        .find({ orgId: reqBy.org_id, status: notDeleted })
+        .find({ ...scopeOf(reqBy), status: notDeleted })
         .select({ title: 1, status: 1 })
         .sort({ title: 1 })
         .lean(),

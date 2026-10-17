@@ -8,8 +8,15 @@ const isObjectId = (v) => typeof v === "string" && /^[a-fA-F0-9]{24}$/.test(v);
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const notDeleted = { $ne: STATUS.DELETED };
 
-const assertAdvertiser = async (advertiserId, orgId) => {
-  const adv = await advertiserModel.findOne({ _id: advertiserId, orgId, status: notDeleted }).select({ name: 1 }).lean();
+// The caller's modifiers: one network's when the caller works in a network
+// (a network user, or an org user who entered one), else the whole org.
+const scopeOf = (reqBy) =>
+  isUndefinedOrNull(reqBy.network_id)
+    ? { orgId: reqBy.org_id }
+    : { orgId: reqBy.org_id, networkId: reqBy.network_id };
+
+const assertAdvertiser = async (advertiserId, scope) => {
+  const adv = await advertiserModel.findOne({ _id: advertiserId, ...scope, status: notDeleted }).select({ name: 1, networkId: 1 }).lean();
   if (isUndefinedOrNull(adv)) throw new Error(`No advertiser exists with id: ${advertiserId}`);
   return adv;
 };
@@ -29,7 +36,7 @@ const bidModifierService = {
 
   list: async ({ data, reqBy }) => {
     const { page, limit, advertiserId, search } = data;
-    const query = { orgId: reqBy.org_id, status: notDeleted };
+    const query = { ...scopeOf(reqBy), status: notDeleted };
     if (advertiserId) query.advertiserId = advertiserId;
     if (!isUndefinedOrNull(search) && search !== "") query.name = new RegExp(escapeRegex(search), "i");
     const skip = (page - 1) * limit;
@@ -54,7 +61,7 @@ const bidModifierService = {
   // The advertiser's modifiers, for the line item picker.
   options: async ({ data, reqBy }) => {
     const rows = await bidModifierModel
-      .find({ orgId: reqBy.org_id, advertiserId: data.advertiserId, status: notDeleted })
+      .find({ ...scopeOf(reqBy), advertiserId: data.advertiserId, status: notDeleted })
       .select({ name: 1, terms: 1, minBid: 1, maxBid: 1 })
       .sort({ name: 1 })
       .lean();
@@ -63,16 +70,17 @@ const bidModifierService = {
 
   getById: async ({ id, reqBy }) => {
     if (!isObjectId(id)) throw new Error("Invalid bid modifier id");
-    const row = await bidModifierModel.findOne({ _id: id, orgId: reqBy.org_id, status: notDeleted });
+    const row = await bidModifierModel.findOne({ _id: id, ...scopeOf(reqBy), status: notDeleted });
     if (isUndefinedOrNull(row)) throw new Error(`No bid modifier exists with id: ${id}`);
     return { data: row };
   },
 
   create: async ({ data, reqBy }) => {
-    await assertAdvertiser(data.advertiserId, reqBy.org_id);
+    const adv = await assertAdvertiser(data.advertiserId, scopeOf(reqBy));
     const saved = await new bidModifierModel({
       ...data,
       orgId: reqBy.org_id,
+      networkId: adv.networkId || null,
       createdBy: reqBy.user_id || null,
       updatedBy: reqBy.user_id || null,
     }).save();
@@ -81,13 +89,13 @@ const bidModifierService = {
 
   update: async ({ id, data, reqBy }) => {
     if (!isObjectId(id)) throw new Error("Invalid bid modifier id");
-    const existing = await bidModifierModel.findOne({ _id: id, orgId: reqBy.org_id, status: notDeleted }).lean();
+    const existing = await bidModifierModel.findOne({ _id: id, ...scopeOf(reqBy), status: notDeleted }).lean();
     if (isUndefinedOrNull(existing)) throw new Error(`No bid modifier exists with id: ${id}`);
     const min = data.minBid !== undefined ? data.minBid : existing.minBid;
     const max = data.maxBid !== undefined ? data.maxBid : existing.maxBid;
     if (min > 0 && max > 0 && min > max) throw new Error("Min bid is higher than the max bid");
     const updated = await bidModifierModel.findOneAndUpdate(
-      { _id: id, orgId: reqBy.org_id, status: notDeleted },
+      { _id: id, ...scopeOf(reqBy), status: notDeleted },
       { $set: { ...data, updatedBy: reqBy.user_id || null } },
       { new: true }
     );
@@ -100,7 +108,7 @@ const bidModifierService = {
     const used = (await usage(reqBy.org_id, [id]))[id] || 0;
     if (used > 0) throw new Error(`${used} line item(s) still use this bid modifier. Remove it from them first.`);
     const updated = await bidModifierModel.findOneAndUpdate(
-      { _id: id, orgId: reqBy.org_id, status: notDeleted },
+      { _id: id, ...scopeOf(reqBy), status: notDeleted },
       { $set: { status: STATUS.DELETED, updatedBy: reqBy.user_id || null } },
       { new: true }
     );

@@ -348,6 +348,20 @@ const buildResponse = (data, range, groupBy, columns, sortBy, sortOrder, page, l
   },
 });
 
+// Inside a network (a network user, or an org user who entered one) reports
+// cover only that network's campaigns; at org level `networkId` narrows them
+// to one network. Narrows match.campaignId to those campaigns.
+const limitToNetwork = async (match, reqBy, networkId) => {
+  const id = reqBy.network_id || networkId;
+  if (isUndefinedOrNull(id) || id === "") return;
+  const rows = await campaignModel.find({ orgId: reqBy.org_id, networkId: id }).select({ _id: 1 }).lean();
+  const allowed = rows.map((r) => String(r._id));
+  const asked = isUndefinedOrNull(match.campaignId)
+    ? null
+    : match.campaignId.$in || [match.campaignId];
+  match.campaignId = { $in: asked ? asked.filter((c) => allowed.includes(String(c))) : allowed };
+};
+
 /* ------------------------------- service ------------------------------- */
 
 const reportService = {
@@ -368,6 +382,7 @@ const reportService = {
     if (!isUndefinedOrNull(data.advertiserId) && data.advertiserId !== "") {
       match.advertiserId = data.advertiserId;
     }
+    await limitToNetwork(match, reqBy, data.networkId);
     if (!isUndefinedOrNull(data.dealId)) {
       // "" = open-auction delivery only (rows written before deals have no dealId).
       match.dealId = data.dealId === "" ? { $in: ["", null] } : data.dealId;
@@ -436,7 +451,11 @@ const reportService = {
 
     if (!isObjectId(campaignId)) throw new Error("Invalid campaign id");
     const campaign = await campaignModel
-      .findOne({ _id: campaignId, orgId: reqBy.org_id })
+      .findOne({
+        _id: campaignId,
+        orgId: reqBy.org_id,
+        ...(isUndefinedOrNull(reqBy.network_id) ? {} : { networkId: reqBy.network_id }),
+      })
       .select({ title: 1, status: 1, type: 1, appName: 1, bundleId: 1, appOs: 1, appIconLink: 1 });
     if (isUndefinedOrNull(campaign)) throw new Error(`No campaign exists with id: ${campaignId}`);
 

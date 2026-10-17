@@ -45,7 +45,7 @@ const { TYPE } = require("../user/constant");
 router.post(
   "/upsert",
   auth,
-  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.NETWORK_ADMIN]),
   execute(userConfigController.upsert)
 );
 
@@ -70,7 +70,7 @@ router.post(
 router.get(
   "/get",
   auth,
-  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.NETWORK_ADMIN]),
   execute(userConfigController.getByUser)
 );
 
@@ -114,7 +114,7 @@ router.get("/me", auth, execute(userConfigController.me));
 router.post(
   "/remove",
   auth,
-  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN]),
+  accessAllowed([TYPE.SUPER_ADMIN, TYPE.ADMIN, TYPE.NETWORK_ADMIN]),
   execute(userConfigController.remove)
 );
 

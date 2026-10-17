@@ -1,6 +1,7 @@
 const axios = require("axios");
 const campaignModel = require("../campaign/model");
 const orgModel = require("../organization/model");
+const networkModel = require("../network/model");
 const { STATUS: CAMPAIGN_STATUS } = require("../campaign/constant");
 
 require("dotenv").config();
@@ -42,14 +43,18 @@ const superAdminService = {
   getAllCampaigns: async () => {
     const campaigns = await campaignModel
       .find({ status: { $ne: CAMPAIGN_STATUS.DELETED } })
-      .select({ title: 1, orgId: 1, status: 1, type: 1, appOs: 1, eventDetails: 1, enableBidding: 1 })
+      .select({ title: 1, orgId: 1, networkId: 1, approval: 1, status: 1, type: 1, appOs: 1, eventDetails: 1, enableBidding: 1 })
       .sort({ createdAt: -1 });
 
-    const orgs = await orgModel.find({}).select({ name: 1 });
+    const [orgs, networks] = await Promise.all([
+      orgModel.find({}).select({ name: 1 }),
+      networkModel.find({}).select({ name: 1 }).lean(),
+    ]);
     const orgName = {};
     orgs.forEach((o) => {
       orgName[String(o._id)] = o.name;
     });
+    const networkName = Object.fromEntries(networks.map((n) => [String(n._id), n.name]));
 
     return {
       data: campaigns.map((c) => ({
@@ -57,6 +62,10 @@ const superAdminService = {
         title: c.title,
         orgId: c.orgId,
         orgName: orgName[String(c.orgId)] || null,
+        networkId: c.networkId || null,
+        networkName: networkName[c.networkId] || null,
+        // The org's approval comes before bidding; no approval = approved (older campaigns).
+        approvalStatus: (c.approval && c.approval.status) || "approved",
         status: c.status,
         type: c.type,
         appOs: c.appOs,

@@ -29,6 +29,7 @@ const bidModifierSchema = new mongoose.Schema(
   {
     orgId: { type: String, required: true },
     advertiserId: { type: String, required: true },
+    networkId: { type: String, default: null }, // the advertiser's network
     name: { type: String, required: true },
     minBid: { type: Number, default: null },
     maxBid: { type: Number, default: null },

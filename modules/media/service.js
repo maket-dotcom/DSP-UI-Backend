@@ -11,6 +11,13 @@ require("dotenv").config();
 const sanitizeFileName = (name) =>
   String(name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
 
+// The caller's uploads: one network's when the caller works in a network
+// (a network user, or an org user who entered one), else the whole org.
+const scopeOf = (reqBy) =>
+  isUndefinedOrNull(reqBy.network_id)
+    ? { orgId: reqBy.org_id }
+    : { orgId: reqBy.org_id, networkId: reqBy.network_id };
+
 const mediaService = {
   add: async ({ data, files, reqBy }) => {
     let { name, type, parentId } = data;
@@ -39,6 +46,7 @@ const mediaService = {
 
     const media = new mediaModel({
       orgId: reqBy.org_id,
+      networkId: reqBy.network_id || null,
       brandId: reqBy.user_id,
       name: name,
       type: type,
@@ -58,7 +66,7 @@ const mediaService = {
   remove: async ({ data, reqBy }) => {
     const { id } = data;
 
-    const media = await mediaModel.findOne({ _id: id, orgId: reqBy.org_id });
+    const media = await mediaModel.findOne({ _id: id, ...scopeOf(reqBy) });
 
     if (isUndefinedOrNull(media)) {
       throw new Error(`No media exists with given id: ${id}`);
@@ -84,7 +92,7 @@ const mediaService = {
 
     const medias = await mediaModel.find({
       _id: { $in: ids },
-      orgId: reqBy.org_id,
+      ...scopeOf(reqBy),
     });
 
     if (isUndefinedOrNull(medias) || _.size(medias) === 0) {

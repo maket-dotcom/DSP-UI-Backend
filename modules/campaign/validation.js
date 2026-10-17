@@ -143,6 +143,8 @@ const appLookup = Joi.object({
 
 const listCampaign = Joi.object({
   advertiserId: Joi.string().trim().pattern(/^[a-fA-F0-9]{24}$/).optional(),
+  // org level: one network's campaigns
+  networkId: Joi.string().trim().pattern(/^[a-fA-F0-9]{24}$/).allow("").optional(),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   type: Joi.string().valid(...Object.values(TYPE)).optional(),

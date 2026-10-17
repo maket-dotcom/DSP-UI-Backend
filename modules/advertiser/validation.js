@@ -30,8 +30,14 @@ const fields = {
   defaults: defaults,
 };
 
+const objectId = Joi.string().trim().pattern(/^[a-fA-F0-9]{24}$/).messages({
+  "string.pattern.base": "Invalid network id",
+});
+
 const create = Joi.object({
   ...fields,
+  // Required at org level; inside a network the advertiser joins that network.
+  networkId: objectId.optional(),
   name: fields.name.required(),
   domain: fields.domain.required(),
   category: fields.category.required(),
@@ -50,6 +56,11 @@ const list = Joi.object({
   limit: Joi.number().integer().min(1).max(100).default(20),
   status: Joi.string().valid(STATUS.ACTIVE, STATUS.PAUSED).optional(),
   search: Joi.string().trim().allow("").optional(),
+  networkId: objectId.allow("").optional(), // org level: one network's advertisers
 });
 
-module.exports = { create, update, changeStatus, list };
+const options = Joi.object({
+  networkId: objectId.allow("").optional(), // org level: one network's advertisers
+});
+
+module.exports = { create, update, changeStatus, list, options };

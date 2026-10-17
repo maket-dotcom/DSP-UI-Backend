@@ -30,6 +30,8 @@ const getReport = Joi.object({
 
   // Filter > Advertiser.
   advertiserId: Joi.string().trim().allow("").optional(),
+  // org level: one network's delivery
+  networkId: Joi.string().trim().pattern(/^[a-fA-F0-9]{24}$/).allow("").optional(),
 
   // Filter > Campaign (single or multiple).
   campaignId: Joi.string().trim().optional(),

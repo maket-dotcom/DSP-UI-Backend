@@ -101,6 +101,20 @@ var campaignSchema = new mongoose.Schema(
     // Advertiser that owns this campaign (Organization → Advertiser → Campaign
     // → Line Item). Missing only on campaigns created before advertisers.
     advertiserId: { type: String, default: null },
+    // The advertiser's network, copied so lists and the engine filter without a join.
+    networkId: { type: String, default: null },
+
+    // The org's approval of what a network created or changed (modules/approval).
+    // Missing = approved (records from before approvals).
+    approval: {
+      status: { type: String },
+      note: { type: String },
+      changes: { type: [String], default: undefined }, // fields changed since the last approval
+      submittedBy: { type: String },
+      submittedAt: { type: Date },
+      reviewedBy: { type: String },
+      reviewedAt: { type: Date },
+    },
 
     title: String,
     goal: String,
@@ -166,7 +180,9 @@ var campaignSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+campaignSchema.index({ orgId: 1, "approval.status": 1 }); // approval queue
 campaignSchema.index({ orgId: 1, advertiserId: 1, status: 1 });
+campaignSchema.index({ orgId: 1, networkId: 1, status: 1 });
 
 module.exports =
   mongoose.models.campaignModel ||
