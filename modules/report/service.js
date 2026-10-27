@@ -5,6 +5,9 @@ const moment = require("moment-timezone");
 const aggregateMetricsModel = require("../aggregate-metrics/model");
 const campaignModel = require("../campaign/model");
 const orgModel = require("../organization/model");
+const networkModel = require("../network/model");
+const advertiserModel = require("../advertiser/model");
+const { NETWORK_TYPES } = require("../user/constant");
 const { isUndefinedOrNull } = require("../../utils/validators");
 const {
   EVENT_NAME,
@@ -134,6 +137,41 @@ const spentExpr = {
 // Custom in-app events = anything not in the core funnel.
 const eventsExpr = { $cond: [{ $in: ["$eventName", CORE_EVENTS] }, 0, numBid] };
 
+// Network users see spend scaled up by their publisher cut, so the full
+// budget they entered appears used and the cut itself stays hidden (the engine
+// only spends budget × (1 − cut)). Returns a stage that divides each row's
+// eCPM by its campaign's (1 − cut), or no stages for everyone else.
+// Cut: the advertiser's own, else its network's.
+const grossUpStages = async (reqBy) => {
+  if (!reqBy || !NETWORK_TYPES.includes(reqBy.type)) return [];
+  const [network, camps] = await Promise.all([
+    networkModel.findOne({ _id: reqBy.network_id }).select({ publisherCut: 1 }).lean(),
+    campaignModel.find({ orgId: reqBy.org_id, networkId: reqBy.network_id }).select({ advertiserId: 1 }).lean(),
+  ]);
+  const advIds = [...new Set(camps.map((c) => c.advertiserId).filter(Boolean))];
+  const advs = advIds.length
+    ? await advertiserModel.find({ _id: { $in: advIds } }).select({ publisherCut: 1 }).lean()
+    : [];
+  const advCut = Object.fromEntries(advs.map((a) => [String(a._id), a.publisherCut]));
+  const cutOf = (c) => {
+    const own = advCut[c.advertiserId];
+    const v = Number(own !== null && own !== undefined ? own : network && network.publisherCut);
+    return v > 0 ? Math.min(v, 90) : 0;
+  };
+  // One branch per distinct cut: campaignId ∈ ids → 1 − cut.
+  const byFactor = {};
+  camps.forEach((c) => {
+    const cut = cutOf(c);
+    if (cut > 0) (byFactor[1 - cut / 100] = byFactor[1 - cut / 100] || []).push(String(c._id));
+  });
+  const branches = Object.entries(byFactor).map(([factor, ids]) => ({
+    case: { $in: ["$campaignId", ids] },
+    then: Number(factor),
+  }));
+  if (!branches.length) return [];
+  return [{ $addFields: { ecpm: { $divide: [numEcpm, { $switch: { branches, default: 1 } }] } } }];
+};
+
 const metricAccumulators = {
   impressions: { $sum: countIf(EVENT_NAME.IMPRESSION) },
   clicks: { $sum: countIf(EVENT_NAME.CLICK) },
@@ -195,7 +233,7 @@ const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // Shared aggregation: group the matched rows by the chosen dimensions, compute
 // metrics + derived columns, sort/paginate, and return shaped rows + totals +
 // the total group count. Used by BOTH the org-scoped and super-admin reports.
-const aggregateGrouped = async ({ match, groupBy, sortBy, sortOrder, page, limit }) => {
+const aggregateGrouped = async ({ match, groupBy, sortBy, sortOrder, page, limit, stages = [] }) => {
   const groupId = {};
   groupBy.forEach((d) => {
     groupId[d] = dimensionExpr(d);
@@ -206,6 +244,7 @@ const aggregateGrouped = async ({ match, groupBy, sortBy, sortOrder, page, limit
 
   const [result] = await aggregateMetricsModel.aggregate([
     { $match: match },
+    ...stages,
     {
       $facet: {
         rows: [
@@ -392,7 +431,9 @@ const reportService = {
       match.$or = [{ campaignId: rx }, { pubId: rx }, { country: rx }, { bundleId: rx }, { dealId: rx }];
     }
 
-    const result = await aggregateGrouped({ match, groupBy, sortBy, sortOrder, page, limit });
+    const result = await aggregateGrouped({
+      match, groupBy, sortBy, sortOrder, page, limit, stages: await grossUpStages(reqBy),
+    });
     if (groupBy.includes(DIMENSION.CAMPAIGN)) await enrichCampaignTitles(result.rows);
     if (groupBy.includes(DIMENSION.ADVERTISER)) await enrichAdvertiserNames(result.rows);
     if (groupBy.includes(DIMENSION.LINE_ITEM)) await enrichLineItemNames(result.rows);
@@ -480,6 +521,7 @@ const reportService = {
 
     const [result] = await aggregateMetricsModel.aggregate([
       { $match: match },
+      ...(await grossUpStages(reqBy)),
       {
         $facet: {
           rows: [

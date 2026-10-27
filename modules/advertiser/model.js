@@ -22,6 +22,10 @@ const advertiserSchema = new mongoose.Schema(
     category: { type: String, default: null }, // IAB code, e.g. "IAB13"
     alternativeId: { type: String, default: null },
     notes: { type: String, default: null },
+    // Publisher cut, in percent: the share of every spend budget the org
+    // keeps. The engine spends only the rest; network users see spend scaled
+    // back up to their full budget and never see this field. null = use the network's cut.
+    publisherCut: { type: Number, default: null },
     status: { type: String, default: STATUS.ACTIVE },
 
     // --- Defaults inherited by new campaigns / line items ---

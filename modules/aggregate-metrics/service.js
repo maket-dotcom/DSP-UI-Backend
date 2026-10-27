@@ -2,6 +2,9 @@ const aggregateMetricsModel = require("./model");
 const campaignModel = require("../campaign/model");
 const orgModel = require("../organization/model");
 const userDetailsModel = require("../user/model");
+const networkModel = require("../network/model");
+const advertiserModel = require("../advertiser/model");
+const { NETWORK_TYPES } = require("../user/constant");
 const { ORG_TYPE } = require("../organization/constant");
 
 // MCP publisher (supply) orgs are not advertisers; keep them out of the
@@ -130,6 +133,41 @@ const countIf = (eventName) => ({
 // Custom in-app events = anything that is not a core funnel event.
 const eventsExpr = { $cond: [{ $in: ["$eventName", CORE_EVENTS] }, 0, numBid] };
 
+// Network users see spend scaled up by their publisher cut, so the full
+// budget they entered appears used and the cut itself stays hidden (the engine
+// only spends budget × (1 − cut)). Returns a stage that divides each row's
+// eCPM by its campaign's (1 − cut), or no stages for everyone else.
+// Cut: the advertiser's own, else its network's.
+const grossUpStages = async (reqBy) => {
+  if (!reqBy || !NETWORK_TYPES.includes(reqBy.type)) return [];
+  const [network, camps] = await Promise.all([
+    networkModel.findOne({ _id: reqBy.network_id }).select({ publisherCut: 1 }).lean(),
+    campaignModel.find({ orgId: reqBy.org_id, networkId: reqBy.network_id }).select({ advertiserId: 1 }).lean(),
+  ]);
+  const advIds = [...new Set(camps.map((c) => c.advertiserId).filter(Boolean))];
+  const advs = advIds.length
+    ? await advertiserModel.find({ _id: { $in: advIds } }).select({ publisherCut: 1 }).lean()
+    : [];
+  const advCut = Object.fromEntries(advs.map((a) => [String(a._id), a.publisherCut]));
+  const cutOf = (c) => {
+    const own = advCut[c.advertiserId];
+    const v = Number(own !== null && own !== undefined ? own : network && network.publisherCut);
+    return v > 0 ? Math.min(v, 90) : 0;
+  };
+  // One branch per distinct cut: campaignId ∈ ids → 1 − cut.
+  const byFactor = {};
+  camps.forEach((c) => {
+    const cut = cutOf(c);
+    if (cut > 0) (byFactor[1 - cut / 100] = byFactor[1 - cut / 100] || []).push(String(c._id));
+  });
+  const branches = Object.entries(byFactor).map(([factor, ids]) => ({
+    case: { $in: ["$campaignId", ids] },
+    then: Number(factor),
+  }));
+  if (!branches.length) return [];
+  return [{ $addFields: { ecpm: { $divide: [numPrice, { $switch: { branches, default: 1 } }] } } }];
+};
+
 const perDocMetric = (metric) => {
   switch (metric) {
     case METRIC.SPENT:
@@ -173,9 +211,10 @@ const costPerClick = (spent, clicks) =>
   clicks > 0 ? round2(spent / clicks) : null;
 
 // Roll up all dashboard metrics for one period in a single pass.
-const aggregateTotals = async ({ orgId, campaignId, start, end }) => {
+const aggregateTotals = async ({ orgId, campaignId, start, end, stages = [] }) => {
   const res = await aggregateMetricsModel.aggregate([
     { $match: buildMatch(orgId, campaignId, start, end) },
+    ...stages,
     {
       $group: {
         _id: null,
@@ -229,6 +268,7 @@ const aggregateMetricsService = {
     const orgId = reqBy.org_id;
     const campaignId = await campaignFilter(reqBy, data.campaignId);
     const range = resolveRange(data);
+    const stages = await grossUpStages(reqBy);
 
     const [cur, prev] = await Promise.all([
       aggregateTotals({
@@ -236,12 +276,14 @@ const aggregateMetricsService = {
         campaignId,
         start: range.startDate,
         end: range.endDate,
+        stages,
       }),
       aggregateTotals({
         orgId,
         campaignId,
         start: range.prevStartDate,
         end: range.prevEndDate,
+        stages,
       }),
     ]);
 
@@ -300,10 +342,12 @@ const aggregateMetricsService = {
     const metric = data.metric || METRIC.INSTALL;
     const range = resolveRange(data);
     const expr = perDocMetric(metric);
+    const stages = await grossUpStages(reqBy);
 
     const seriesFor = async (start, end) => {
       const rows = await aggregateMetricsModel.aggregate([
         { $match: buildMatch(orgId, campaignId, start, end) },
+        ...stages,
         { $group: { _id: "$date", value: { $sum: expr } } },
       ]);
       const map = {};
@@ -362,6 +406,7 @@ const aggregateMetricsService = {
           date: { $gte: range.startDate, $lte: range.endDate },
         },
       },
+      ...(await grossUpStages(reqBy)),
       {
         $group: {
           _id: "$campaignId",

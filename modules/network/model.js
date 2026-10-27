@@ -17,6 +17,11 @@ const networkSchema = new mongoose.Schema(
     // Campaigns the network creates wait for the org's approval.
     requireApproval: { type: Boolean, default: true },
     notes: { type: String, default: null },
+    // Publisher cut, in percent: the share of every spend budget the org
+    // keeps. The engine spends only the rest; network users see spend scaled
+    // back up to their full budget and never see this field. null = none.
+    // An advertiser's own cut takes priority over this one.
+    publisherCut: { type: Number, default: null },
 
     createdBy: { type: String, default: null },
     updatedBy: { type: String, default: null },

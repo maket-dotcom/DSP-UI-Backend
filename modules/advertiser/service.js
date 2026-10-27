@@ -29,6 +29,14 @@ const scopeOf = (reqBy) =>
     : { orgId: reqBy.org_id, networkId: reqBy.network_id };
 const isOrgUser = (reqBy) => !NETWORK_TYPES.includes(reqBy.type);
 
+// The publisher cut is the org's business: network users can neither see
+// nor set it.
+const withoutCut = (doc) => {
+  const { publisherCut, ...rest } = doc;
+  return rest;
+};
+const forCaller = (reqBy, doc) => (isOrgUser(reqBy) ? doc : withoutCut(doc));
+
 // Network names for rows, keyed by network id.
 const networkNames = async (orgId, ids) => {
   const unique = [...new Set(ids.filter(Boolean))];
@@ -81,7 +89,7 @@ const advertiserService = {
     ]);
     return {
       data: rows.map((r) => ({
-        ...r,
+        ...forCaller(reqBy, r),
         networkName: names[r.networkId] || null,
         categoryName: CATEGORY[r.category] || null,
         campaigns: counts[String(r._id)] || { total: 0, active: 0 },
@@ -110,7 +118,13 @@ const advertiserService = {
     const adv = await advertiserModel.findOne({ _id: id, ...scopeOf(reqBy), status: notDeleted }).lean();
     if (isUndefinedOrNull(adv)) throw new Error(`No advertiser exists with id: ${id}`);
     const names = await networkNames(reqBy.org_id, [adv.networkId]);
-    return { data: { ...adv, networkName: names[adv.networkId] || null } };
+    const data = { ...forCaller(reqBy, adv), networkName: names[adv.networkId] || null };
+    // Org users see the network's cut too: it applies when the advertiser has none.
+    if (isOrgUser(reqBy) && adv.networkId) {
+      const net = await networkModel.findOne({ _id: adv.networkId, orgId: reqBy.org_id }).select({ publisherCut: 1 }).lean();
+      data.networkPublisherCut = net && net.publisherCut !== undefined ? net.publisherCut : null;
+    }
+    return { data };
   },
 
   create: async ({ data, reqBy }) => {
@@ -125,7 +139,7 @@ const advertiserService = {
     const network = await networkModel.findOne({ _id: networkId, orgId: reqBy.org_id, status: { $ne: "deleted" } }).lean();
     if (isUndefinedOrNull(network)) throw new Error(`No network exists with id: ${networkId}`);
 
-    const payload = cleanDefaults(await withBucketIcon({ ...data }, reqBy.org_id));
+    const payload = cleanDefaults(await withBucketIcon(forCaller(reqBy, { ...data }), reqBy.org_id));
     await presetService.assertDefaults({
       defaults: payload.defaults,
       advertiserId: null,
@@ -140,14 +154,14 @@ const advertiserService = {
       createdBy: reqBy.user_id || null,
       updatedBy: reqBy.user_id || null,
     }).save();
-    return { message: "Advertiser created successfully", data: saved };
+    return { message: "Advertiser created successfully", data: forCaller(reqBy, saved.toObject()) };
   },
 
   update: async ({ id, data, reqBy }) => {
     if (!isObjectId(id)) throw new Error("Invalid advertiser id");
     const existing = await advertiserModel.findOne({ _id: id, ...scopeOf(reqBy), status: notDeleted }).select({ networkId: 1 }).lean();
     if (isUndefinedOrNull(existing)) throw new Error(`No advertiser exists with id: ${id}`);
-    const payload = cleanDefaults(await withBucketIcon({ ...data }, reqBy.org_id));
+    const payload = cleanDefaults(await withBucketIcon(forCaller(reqBy, { ...data }), reqBy.org_id));
     await presetService.assertDefaults({
       defaults: payload.defaults,
       advertiserId: id,
@@ -161,7 +175,7 @@ const advertiserService = {
       { new: true }
     );
     if (isUndefinedOrNull(updated)) throw new Error(`No advertiser exists with id: ${id}`);
-    return { message: "Advertiser updated successfully", data: updated };
+    return { message: "Advertiser updated successfully", data: forCaller(reqBy, updated.toObject()) };
   },
 
   // Pausing an advertiser stops all of its campaigns in the bid engine.

@@ -26,6 +26,11 @@ const fields = {
   }),
   alternativeId: Joi.string().trim().allow("", null),
   notes: Joi.string().trim().max(2000).allow("", null),
+  // Publisher cut % (org and super admin only; see the model).
+  publisherCut: Joi.number().min(0).max(90).allow(null).messages({
+    "number.max": "Publisher cut can be at most 90%",
+    "number.min": "Publisher cut can't be negative",
+  }),
   status: Joi.string().valid(STATUS.ACTIVE, STATUS.PAUSED),
   defaults: defaults,
 };
