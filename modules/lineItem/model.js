@@ -151,6 +151,9 @@ const lineItemSchema = new mongoose.Schema(
       segments: {
         audienceTarget: { type: String, default: "all" }, // all | custom
         customAudienceIds: { type: [String], default: [] },
+        // Audience segment keys ("in.26", "iab4.243"): the device must be in
+        // at least one include and in no exclude. See modules/segment.
+        audiences: includeExclude(String),
         retargeting: {
           include: { type: [segmentRefSchema], default: [] }, // in at least one
           exclude: { type: [segmentRefSchema], default: [] }, // in none

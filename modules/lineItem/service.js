@@ -2,6 +2,7 @@ const lineItemModel = require("./model");
 const campaignModel = require("../campaign/model");
 const creativeService = require("../creative/service");
 const targetingListService = require("../targetingList/service");
+const segmentService = require("../segment/service");
 const supplyPartnerModel = require("../supply/model");
 const bidModifierService = require("../bidModifier/service");
 const deliveryModifierService = require("../deliveryModifier/service");
@@ -124,13 +125,14 @@ const validateAgainstCampaign = async ({ li, campaign, selfId, orgId }) => {
 // Targeting that points at other records: bundle lists, supply partners and
 // zones, and the campaigns whose audiences it retargets. Each must exist (and
 // lists must be usable by the campaign's network, campaigns must be in it).
-const validateTargetingRefs = async ({ li, campaign, orgId, orgUser }) => {
+const validateTargetingRefs = async ({ li, campaign, orgId, orgUser, previousAudiences = null }) => {
   const t = li.targeting || {};
   const ids = (ie) => [...((ie || {}).include || []), ...((ie || {}).exclude || [])];
   const lists = { orgId, networkId: campaign.networkId || null, orgUser };
   await targetingListService.assertBelongTo({ ids: ids(t.inventory?.bundleLists), kind: LIST_KIND.BUNDLE, ...lists });
   await targetingListService.assertBelongTo({ ids: ids(t.inventory?.dealLists), kind: LIST_KIND.DEAL, ...lists });
   await targetingListService.assertBelongTo({ ids: ids(t.geo?.zipLists), kind: LIST_KIND.ZIP, ...lists });
+  await segmentService.assertUsable({ audiences: t.segments?.audiences, previous: previousAudiences });
 
   if (li.bidModifierId) {
     await bidModifierService.assertUsable({ id: li.bidModifierId, advertiserId: campaign.advertiserId, orgId });
@@ -230,7 +232,10 @@ const lineItemService = {
     const merged = { ...existing, ...patch };
     await validateAgainstCampaign({ li: merged, campaign, selfId: existing._id, orgId: reqBy.org_id });
     if (patch.targeting || patch.bidModifierId || patch.deliveryModifierId) {
-      await validateTargetingRefs({ li: merged, campaign, orgId: reqBy.org_id, orgUser: isOrgUser(reqBy) });
+      await validateTargetingRefs({
+        li: merged, campaign, orgId: reqBy.org_id, orgUser: isOrgUser(reqBy),
+        previousAudiences: existing.targeting?.segments?.audiences,
+      });
     }
     assertCanActivate(merged);
 

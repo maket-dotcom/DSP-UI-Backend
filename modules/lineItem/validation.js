@@ -15,6 +15,9 @@ const {
   MAX_INLINE_VALUES,
 } = require("./constant");
 
+const { segmentKey } = require("../segment/validation");
+const { MAX_PER_SIDE: SEGMENT_MAX } = require("../segment/constant");
+
 const objectId = Joi.string().trim().pattern(/^[a-fA-F0-9]{24}$/).messages({
   "string.pattern.base": "{{#label}} must be a valid id",
 });
@@ -164,6 +167,16 @@ const targeting = Joi.object({
   segments: Joi.object({
     audienceTarget: Joi.string().valid(...Object.values(AUDIENCE_TARGET)).default("all"),
     customAudienceIds: Joi.array().items(Joi.string().trim()).default([]),
+    audiences: Joi.object({
+      include: Joi.array().items(segmentKey).max(SEGMENT_MAX).unique().default([]),
+      exclude: Joi.array().items(segmentKey).max(SEGMENT_MAX).unique().default([]),
+    })
+      .custom((v, helpers) => {
+        const ex = new Set(v.exclude);
+        const both = v.include.find((x) => ex.has(x));
+        return both ? helpers.message(`Segment "${both}" is both included and excluded`) : v;
+      })
+      .default({}),
     retargeting: Joi.object({
       include: Joi.array().items(segmentRef).max(20).default([]),
       exclude: Joi.array().items(segmentRef).max(20).default([]),
