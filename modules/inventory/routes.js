@@ -17,7 +17,7 @@ const canView = requirePermission(RESOURCES.CAMPAIGN, ACTIONS.VIEW);
  * tags:
  *   name: Inventory
  *   description: Exchange inventory reports (apps by bundle or name, per exchange and device, with request
- *     volumes) for the line item's Inventory list, plus the OEM / premium partner list.
+ *     volumes) for the line item's Inventory list, plus the OEM partner list.
  */
 
 /**
@@ -55,7 +55,7 @@ router.get("/facets", auth, allowed, canView, execute(inventoryController.facets
  * @swagger
  * /api/v1/inventory/partners:
  *   get:
- *     summary: OEMs and premium DSPs a line item can be planned against
+ *     summary: OEMs a line item can be planned against
  *     tags: [Inventory]
  *     security: [ { bearerAuth: [] } ]
  *     responses: { 200: { description: Partners } }
